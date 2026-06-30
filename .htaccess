@@ -1,0 +1,43 @@
+# ============================================================
+# SISTEMA RH - Seguridad y reescritura
+# ============================================================
+
+# Codificación por defecto
+AddDefaultCharset UTF-8
+
+# Denegar listado de directorios
+Options -Indexes
+
+# Denegar acceso a directorios sensibles
+RedirectMatch 403 ^/config/.*$
+RedirectMatch 403 ^/includes/.*$
+RedirectMatch 403 ^/sql/.*$
+RedirectMatch 403 ^/uploads/.*$
+
+# Proteger archivo .htaccess
+<FilesMatch "^\.ht">
+    Require all denied
+</FilesMatch>
+
+# Redirigir todo al index.php (single entry point)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /Sistema%20RH/
+
+    # Si el archivo o directorio existe, servirlo directamente
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php?url=$1 [QSA,L]
+</IfModule>
+
+# Prevenir clickjacking
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# Cache estático para assets
+<FilesMatch "\.(css|js|jpg|jpeg|png|gif|ico|svg|woff2?)$">
+    Header set Cache-Control "max-age=2592000, public"
+</FilesMatch>
