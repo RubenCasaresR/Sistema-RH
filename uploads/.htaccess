@@ -1,0 +1,14 @@
+# Denegar acceso directo a documentos sensibles
+# Las imágenes de perfil se permiten para mostrar en la interfaz
+<FilesMatch "\.(pdf|doc|docx|xls|xlsx|zip|rar|txt)$">
+    Require all denied
+</FilesMatch>
+
+# Bloquear acceso a directorios específicos de documentos
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Solo redirigir a api/files.php para documentos, no para fotos
+    RewriteCond %{REQUEST_URI} ^/Sistema%20RH/uploads/documents/ [OR]
+    RewriteCond %{REQUEST_URI} ^/Sistema%20RH/uploads/cvs/
+    RewriteRule .* - [F]
+</IfModule>
