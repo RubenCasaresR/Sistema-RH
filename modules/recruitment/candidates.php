@@ -53,6 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         if (!in_array($ext, ['pdf', 'doc', 'docx'], true)) { $errors[] = 'CV debe ser PDF, DOC o DOCX.'; }
         if ($file['size'] > 5 * 1024 * 1024) { $errors[] = 'CV excede 5 MB.'; }
 
+        $allowedMimes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        $fileMime = mime_content_type($file['tmp_name']);
+        if (!in_array($fileMime, $allowedMimes, true)) $errors[] = 'El archivo no parece ser un PDF o Word válido.';
+
         if (count($errors) === 0) {
             $uniqueName = 'cv_' . uniqid() . '.' . $ext;
             $uploadDir = 'uploads' . DIRECTORY_SEPARATOR . 'cvs' . DIRECTORY_SEPARATOR;

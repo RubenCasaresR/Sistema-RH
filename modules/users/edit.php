@@ -19,6 +19,10 @@ if (!$user) {
     redirect(APP_URL . '/modules/users/index.php');
 }
 
+$stmtRole = $db->prepare("SELECT nombre FROM roles WHERE id = :id LIMIT 1");
+$stmtRole->execute([':id' => $user['role_id']]);
+$currentRoleName = $stmtRole->fetchColumn() ?: 'Empleado';
+
 $roles = array_keys(getRolePermissions());
 $errors = [];
 
@@ -29,12 +33,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $username = trim($_POST['username'] ?? '');
         $password = $_POST['password'] ?? '';
-        $role = $_POST['role'] ?? $user['role'];
+        $role = $_POST['role'] ?? $currentRoleName;
         $activo = isset($_POST['activo']) ? 1 : 0;
         $passwordChangeRequired = isset($_POST['password_change_required']) ? 1 : 0;
 
         if ($username === '') $errors[] = 'El nombre de usuario es obligatorio.';
         if (!in_array($role, $roles, true)) $errors[] = 'Rol no válido.';
+
+        $stmtRole = $db->prepare("SELECT id FROM roles WHERE nombre = :r LIMIT 1");
+        $stmtRole->execute([':r' => $role]);
+        $roleId = $stmtRole->fetchColumn();
+        if (!$roleId) $errors[] = 'Rol no encontrado en la base de datos.';
 
         $check = $db->prepare("SELECT id FROM users WHERE username = :u AND id != :id");
         $check->execute([':u' => $username, ':id' => $id]);
@@ -45,12 +54,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (strlen($password) < 8) {
                     $errors[] = 'La contraseña debe tener al menos 8 caracteres.';
                 } else {
-                    $stmtU = $db->prepare("UPDATE users SET username = :u, password = :p, role = :r, activo = :act, password_change_required = :pcr WHERE id = :id");
-                    $stmtU->execute([':u' => $username, ':p' => hashPassword($password), ':r' => $role, ':act' => $activo, ':pcr' => $passwordChangeRequired, ':id' => $id]);
+                    $stmtU = $db->prepare("UPDATE users SET username = :u, password_hash = :p, role_id = :r, activo = :act, password_change_required = :pcr WHERE id = :id");
+                    $stmtU->execute([':u' => $username, ':p' => hashPassword($password), ':r' => $roleId, ':act' => $activo, ':pcr' => $passwordChangeRequired, ':id' => $id]);
                 }
             } else {
-                $stmtU = $db->prepare("UPDATE users SET username = :u, role = :r, activo = :act, password_change_required = :pcr WHERE id = :id");
-                $stmtU->execute([':u' => $username, ':r' => $role, ':act' => $activo, ':pcr' => $passwordChangeRequired, ':id' => $id]);
+                $stmtU = $db->prepare("UPDATE users SET username = :u, role_id = :r, activo = :act, password_change_required = :pcr WHERE id = :id");
+                $stmtU->execute([':u' => $username, ':r' => $roleId, ':act' => $activo, ':pcr' => $passwordChangeRequired, ':id' => $id]);
             }
 
             if (count($errors) === 0) {
@@ -92,7 +101,7 @@ $csrfToken = generateCSRFToken();
             <label for="role">Rol *</label>
             <select id="role" name="role" required>
                 <?php foreach ($roles as $r): ?>
-                    <option value="<?= h($r) ?>" <?= ($_POST['role'] ?? $user['role']) === $r ? 'selected' : '' ?>><?= h($r) ?></option>
+                    <option value="<?= h($r) ?>" <?= ($_POST['role'] ?? $currentRoleName) === $r ? 'selected' : '' ?>><?= h($r) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>

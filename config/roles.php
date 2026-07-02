@@ -114,6 +114,7 @@ function getRolePermissions(): array
             'leave.request', 'leave.read',
             'announcements.read',
             'documents.read',
+            'reports.dashboard',
         ],
 
         // Dirección: visión estratégica

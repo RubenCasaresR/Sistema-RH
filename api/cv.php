@@ -16,11 +16,17 @@ if ($candidateId <= 0 || !verifyCSRFToken($token)) {
 
 requirePermission('recruitment.read');
 
-$db = getDB();
-
-$stmt = $db->prepare("SELECT c.cv_ruta, c.nombre, c.apellido_paterno, c.apellido_materno, v.titulo AS vacante_titulo FROM candidates c INNER JOIN vacancies v ON v.id = c.vacancy_id WHERE c.id = :id LIMIT 1");
-$stmt->execute([':id' => $candidateId]);
-$candidate = $stmt->fetch();
+try {
+    $db = getDB();
+    $stmt = $db->prepare("SELECT c.cv_ruta, c.nombre, c.apellido_paterno, c.apellido_materno, v.titulo AS vacante_titulo FROM candidates c INNER JOIN vacancies v ON v.id = c.vacancy_id WHERE c.id = :id LIMIT 1");
+    $stmt->execute([':id' => $candidateId]);
+    $candidate = $stmt->fetch();
+} catch (PDOException $e) {
+    error_log('Error en cv.php: ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Error interno del servidor.']);
+    exit;
+}
 
 if (!$candidate || !$candidate['cv_ruta']) {
     http_response_code(404);

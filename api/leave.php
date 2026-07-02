@@ -53,6 +53,14 @@ function handleCreate(PDO $db): void
     }
 
     $input = json_decode(file_get_contents('php://input'), true);
+
+    $csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!verifyCSRFToken($csrfToken)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Token de seguridad inválido.']);
+        return;
+    }
+
     $employeeId = (int)($input['employee_id'] ?? 0);
     $tipo = $input['tipo'] ?? '';
     $fechaInicio = $input['fecha_inicio'] ?? '';
@@ -65,8 +73,14 @@ function handleCreate(PDO $db): void
         return;
     }
 
-    $inicio = new DateTime($fechaInicio);
-    $fin = new DateTime($fechaFin);
+    try {
+        $inicio = new DateTime($fechaInicio);
+        $fin = new DateTime($fechaFin);
+    } catch (Exception $e) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Fechas inválidas.']);
+        return;
+    }
     $dias = (int)$inicio->diff($fin)->days + 1;
 
     $stmt = $db->prepare("INSERT INTO leave_requests (employee_id, tipo, fecha_inicio, fecha_fin, dias_solicitados, motivo, estatus) VALUES (:eid, :tipo, :inicio, :fin, :dias, :motivo, 'pendiente')");

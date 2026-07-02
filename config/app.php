@@ -1,6 +1,8 @@
 <?php
 
 date_default_timezone_set('America/Mexico_City');
+ini_set('default_charset', 'UTF-8');
+mb_internal_encoding('UTF-8');
 
 $envFile = __DIR__ . '/../.env';
 if (file_exists($envFile)) {
@@ -39,6 +41,8 @@ define('SESSION_TIMEOUT', (int)env('SESSION_TIMEOUT', 1800));
 define('LATE_THRESHOLD', env('LATE_THRESHOLD', '09:05'));
 define('JORNADA_HORAS', (int)env('JORNADA_HORAS', 8));
 
-define('APP_VERSION', '1.1.0');
+define('REMEMBER_ME_LIFETIME', (int)env('REMEMBER_ME_LIFETIME', 30 * 24 * 3600));
+
+define('APP_VERSION', '1.2.0');
 define('MAIL_FROM', env('MAIL_FROM', 'noreply@localhost'));
 

@@ -33,9 +33,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$chk->fetch()) $errors[] = 'El empleado seleccionado ya tiene un usuario vinculado.';
         }
 
+        $email = trim($_POST['email'] ?? '');
+        if ($email === '') $errors[] = 'El correo electrónico es obligatorio.';
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'El correo electrónico no es válido.';
+
+        $stmtRole = $db->prepare("SELECT id FROM roles WHERE nombre = :r LIMIT 1");
+        $stmtRole->execute([':r' => $role]);
+        $roleId = $stmtRole->fetchColumn();
+        if (!$roleId) $errors[] = 'Rol no encontrado en la base de datos.';
+
         if (count($errors) === 0) {
-            $stmt = $db->prepare("INSERT INTO users (username, password, role, activo) VALUES (:u, :p, :r, 1)");
-            $stmt->execute([':u' => $username, ':p' => hashPassword($password), ':r' => $role]);
+            $stmt = $db->prepare("INSERT INTO users (username, email, password_hash, role_id, activo) VALUES (:u, :e, :p, :r, 1)");
+            $stmt->execute([':u' => $username, ':e' => $email, ':p' => hashPassword($password), ':r' => $roleId]);
             $newId = (int)$db->lastInsertId();
 
             if ($employeeId > 0) {
@@ -69,6 +78,11 @@ $csrfToken = generateCSRFToken();
         <div class="form-group">
             <label for="username">Nombre de usuario *</label>
             <input type="text" id="username" name="username" value="<?= h($old['username'] ?? '') ?>" required autofocus>
+        </div>
+
+        <div class="form-group">
+            <label for="email">Correo electrónico *</label>
+            <input type="email" id="email" name="email" value="<?= h($old['email'] ?? '') ?>" required>
         </div>
 
         <div class="form-group">

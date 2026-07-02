@@ -292,7 +292,7 @@ $totalPagHist = max(1, (int)ceil($totalHist / 50));
                       onsubmit="return validarRechazo(this, <?= (int)$r['id'] ?>)">
                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
                     <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
-                    <input type="text" name="comentarios" placeholder="Comentarios<?= $action === 'rechazar' ? '' : ' (opcional)' ?>"
+                    <input type="text" name="comentarios" placeholder="Comentarios<?= ($action ?? '') === 'rechazar' ? '' : ' (opcional)' ?>"
                            style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:0.85rem;"
                            id="comentarios_<?= (int)$r['id'] ?>">
                     <button type="submit" name="action" value="aprobar" class="btn btn-sm btn-primary"
@@ -334,11 +334,12 @@ $totalPagHist = max(1, (int)ceil($totalHist / 50));
                     <th>Estatus</th>
                     <th>Aprobador</th>
                     <th>Fecha</th>
+                    <th>Comentarios</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (count($history) === 0): ?>
-                    <tr><td colspan="7" class="empty-state">Sin actividad reciente.</td></tr>
+                    <tr><td colspan="8" class="empty-state">Sin actividad reciente.</td></tr>
                 <?php else: ?>
                     <?php foreach ($history as $h): ?>
                         <?php
@@ -358,6 +359,7 @@ $totalPagHist = max(1, (int)ceil($totalHist / 50));
                             </td>
                             <td><?= h($h['aprobador'] ?? '—') ?></td>
                             <td><?= $h['fecha_aprobacion'] ? date('d/m/Y', strtotime($h['fecha_aprobacion'])) : '—' ?></td>
+                            <td><?= h($h['comentarios_aprobador'] ?? '—') ?></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

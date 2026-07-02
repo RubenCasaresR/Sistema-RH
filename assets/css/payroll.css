@@ -81,6 +81,25 @@
     font-size: 1.2rem;
 }
 
+/* --- Incidencias manuales y bonos --- */
+.kpi-card .kpi-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+}
+
+.form-row .form-group select,
+.form-row .form-group input {
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .form-row {
+        flex-direction: column;
+    }
+}
+
 @media print {
     body * { visibility: hidden; }
     #modalRecibo.modal-open, #modalRecibo.modal-open * { visibility: visible; }
