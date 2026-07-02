@@ -127,12 +127,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Rol seleccionado no válido.';
         }
 
+        $stmtRole = $db->prepare("SELECT id FROM roles WHERE nombre = :r LIMIT 1");
+            $stmtRole->execute([':r' => $newRole]);
+            $roleId = $stmtRole->fetchColumn();
+            if (!$roleId) $errors[] = 'Rol no encontrado en la base de datos.';
+
         if (count($errors) === 0) {
-            $insertUser = $db->prepare("INSERT INTO users (username, password, role, activo) VALUES (:u, :p, :r, 1)");
+            $userEmail = $data['email'] !== '' ? $data['email'] : $newUsername . '@sin-correo.local';
+            $insertUser = $db->prepare("INSERT INTO users (username, email, password_hash, role_id, activo) VALUES (:u, :e, :p, :r, 1)");
             $insertUser->execute([
                 ':u' => $newUsername,
+                ':e' => $userEmail,
                 ':p' => password_hash($newPassword, PASSWORD_DEFAULT),
-                ':r' => $newRole,
+                ':r' => $roleId,
             ]);
             $newUserId = (int)$db->lastInsertId();
         }
@@ -437,7 +444,7 @@ $csrfToken = generateCSRFToken();
                     <div class="form-group"><label for="new_role">Rol</label>
                         <select id="new_role" name="new_role">
                             <?php foreach ($roles as $r): ?>
-                                <option value="<?= h($r['name']) ?>"><?= h($r['display_name']) ?></option>
+                                <option value="<?= h($r) ?>"><?= h($r) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>

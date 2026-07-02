@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $_GET['action'] = 'login';
 $_SERVER['REQUEST_METHOD'] = 'POST';
 $_SERVER['HTTP_HOST'] = 'localhost';

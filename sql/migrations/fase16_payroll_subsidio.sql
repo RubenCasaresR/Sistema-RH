@@ -1,0 +1,50 @@
+CREATE TABLE IF NOT EXISTS tax_subsidio_tariff (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    ejercicio YEAR NOT NULL,
+    tipo ENUM('mensual', 'quincenal', 'semanal') NOT NULL DEFAULT 'mensual',
+    limite_inferior DECIMAL(12,2) NOT NULL,
+    limite_superior DECIMAL(12,2) NOT NULL,
+    subsidio DECIMAL(12,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_ejercicio_tipo (ejercicio, tipo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO tax_subsidio_tariff (ejercicio, tipo, limite_inferior, limite_superior, subsidio) VALUES
+(2025, 'mensual',       0.01,   1768.32,    407.02),
+(2025, 'mensual',    1768.33,   2276.77,    406.49),
+(2025, 'mensual',    2276.78,   2674.38,    406.02),
+(2025, 'mensual',    2674.39,   3071.99,    392.77),
+(2025, 'mensual',    3072.00,   3867.23,    382.26),
+(2025, 'mensual',    3867.24,   4662.47,    354.23),
+(2025, 'mensual',    4662.48,   5457.71,    324.20),
+(2025, 'mensual',    5457.72,   6252.95,    294.17),
+(2025, 'mensual',    6252.96,   7048.18,    264.14),
+(2025, 'mensual',    7048.19,   7843.42,    234.11),
+(2025, 'mensual',    7843.43,   8638.66,    204.08),
+(2025, 'mensual',    8638.67,   9433.90,    174.05),
+(2025, 'mensual',    9433.91,  10229.14,    144.02),
+(2025, 'mensual',   10229.15,  11024.38,    113.99),
+(2025, 'mensual',   11024.39,  11819.62,     83.96),
+(2025, 'mensual',   11819.63,  12614.86,     53.93),
+(2025, 'mensual',   12614.87,  13410.10,     23.90),
+(2025, 'mensual',   13410.11, 999999.99,      0.00);
+
+INSERT INTO tax_subsidio_tariff (ejercicio, tipo, limite_inferior, limite_superior, subsidio) VALUES
+(2025, 'quincenal',       0.01,    884.16,    203.51),
+(2025, 'quincenal',     884.17,   1138.39,    203.25),
+(2025, 'quincenal',    1138.40,   1337.19,    203.01),
+(2025, 'quincenal',    1337.20,   1536.00,    196.39),
+(2025, 'quincenal',    1536.01,   1933.62,    191.13),
+(2025, 'quincenal',    1933.63,   2331.24,    177.12),
+(2025, 'quincenal',    2331.25,   2728.86,    162.10),
+(2025, 'quincenal',    2728.87,   3126.48,    147.09),
+(2025, 'quincenal',    3126.49,   3524.09,    132.07),
+(2025, 'quincenal',    3524.10,   3921.71,    117.06),
+(2025, 'quincenal',    3921.72,   4319.33,    102.04),
+(2025, 'quincenal',    4319.34,   4716.95,     87.03),
+(2025, 'quincenal',    4716.96,   5114.57,     72.01),
+(2025, 'quincenal',    5114.58,   5512.19,     57.00),
+(2025, 'quincenal',    5512.20,   5909.81,     41.98),
+(2025, 'quincenal',    5909.82,   6307.43,     26.97),
+(2025, 'quincenal',    6307.44,   6705.05,     11.95),
+(2025, 'quincenal',    6705.06, 999999.99,      0.00);

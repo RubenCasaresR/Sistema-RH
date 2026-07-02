@@ -17,19 +17,33 @@ if ($id <= 0 || !verifyCSRFToken($token)) {
 
 requirePermission('documents.read');
 
-$db = getDB();
+try {
+    $db = getDB();
+} catch (PDOException $e) {
+    error_log('Error en files.php: ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Error interno del servidor.']);
+    exit;
+}
 
 // If version specified, serve from document_versions
 if ($versionId > 0) {
-    $stmt = $db->prepare("
-        SELECT dv.*, ed.employee_id
-        FROM document_versions dv
-        INNER JOIN employee_documents ed ON ed.id = dv.document_id
-        WHERE dv.id = :vid AND dv.document_id = :did
-        LIMIT 1
-    ");
-    $stmt->execute([':vid' => $versionId, ':did' => $id]);
-    $doc = $stmt->fetch();
+    try {
+        $stmt = $db->prepare("
+            SELECT dv.*, ed.employee_id
+            FROM document_versions dv
+            INNER JOIN employee_documents ed ON ed.id = dv.document_id
+            WHERE dv.id = :vid AND dv.document_id = :did
+            LIMIT 1
+        ");
+        $stmt->execute([':vid' => $versionId, ':did' => $id]);
+        $doc = $stmt->fetch();
+    } catch (PDOException $e) {
+        error_log('Error en files.php: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Error interno del servidor.']);
+        exit;
+    }
 
     if (!$doc) {
         http_response_code(404);
@@ -64,15 +78,22 @@ if ($versionId > 0) {
     exit;
 }
 
-$stmt = $db->prepare("
-    SELECT ed.*, e.nombre, e.apellido_paterno
-    FROM employee_documents ed
-    INNER JOIN employees e ON e.id = ed.employee_id
-    WHERE ed.id = :id
-    LIMIT 1
-");
-$stmt->execute([':id' => $id]);
-$doc = $stmt->fetch();
+try {
+    $stmt = $db->prepare("
+        SELECT ed.*, e.nombre, e.apellido_paterno
+        FROM employee_documents ed
+        INNER JOIN employees e ON e.id = ed.employee_id
+        WHERE ed.id = :id
+        LIMIT 1
+    ");
+    $stmt->execute([':id' => $id]);
+    $doc = $stmt->fetch();
+} catch (PDOException $e) {
+    error_log('Error en files.php: ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Error interno del servidor.']);
+    exit;
+}
 
 if (!$doc) {
     http_response_code(404);

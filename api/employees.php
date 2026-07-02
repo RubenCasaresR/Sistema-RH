@@ -78,7 +78,15 @@ function handleGet(PDO $db): void
         return;
     }
 
-    $stmt = $db->prepare('SELECT * FROM employees WHERE id = :id LIMIT 1');
+    $stmt = $db->prepare('
+        SELECT id, user_id, nombre, apellido_paterno, apellido_materno,
+               curp, rfc, fecha_nacimiento, genero,
+               email, telefono, calle, numero_exterior, numero_interior,
+               colonia, codigo_postal, ciudad, estado, pais,
+               puesto, departamento, fecha_ingreso, tipo_contrato,
+               foto_url, notas, activo, created_at, updated_at
+        FROM employees WHERE id = :id LIMIT 1
+    ');
     $stmt->execute([':id' => $id]);
     $emp = $stmt->fetch();
 

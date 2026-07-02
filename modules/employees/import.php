@@ -4,13 +4,7 @@ require_once __DIR__ . '/../../includes/session.php';
 requireAuth();
 requirePermission('employees.create');
 
-require_once __DIR__ . '/../../includes/header.php';
-
-$db = getDB();
-$errors = [];
-$results = [];
-
-// Descarga de plantilla CSV
+// Descarga de plantilla CSV — debe ir antes del header HTML
 if (isset($_GET['action']) && $_GET['action'] === 'template') {
     $cols = ['nombre','apellido_paterno','apellido_materno','curp','rfc','nss','fecha_nacimiento','genero','email','telefono','calle','numero_exterior','numero_interior','colonia','codigo_postal','ciudad','estado','puesto','departamento','fecha_ingreso','salario_base','tipo_contrato','user_id'];
     header('Content-Type: text/csv; charset=utf-8');
@@ -23,8 +17,17 @@ if (isset($_GET['action']) && $_GET['action'] === 'template') {
     exit;
 }
 
+require_once __DIR__ . '/../../includes/header.php';
+
+$db = getDB();
+$errors = [];
+$results = [];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['confirm'])) {
+    $csrfToken = $_POST['csrf_token'] ?? '';
+    if (!verifyCSRFToken($csrfToken)) {
+        $errors[] = 'Token de seguridad inválido.';
+    } elseif (isset($_POST['confirm'])) {
         $csvHeaders = json_decode(base64_decode($_POST['csv_headers']), true) ?? [];
         $csvRows = json_decode(base64_decode($_POST['csv_data']), true) ?? [];
         $headers = $csvHeaders;
@@ -142,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'failed'   => $failed,
             ];
         }
-    } else {
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
             $errors[] = 'Selecciona un archivo CSV válido.';
         } else {
@@ -244,6 +247,7 @@ $positions = $db->query("SELECT id, nombre FROM positions WHERE activo = 1 ORDER
                 </table>
             </div>
             <form method="post" style="margin-top:16px;">
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                 <input type="hidden" name="confirm" value="1">
                 <input type="hidden" name="csv_headers" value="<?= h($csvHeadersEncoded) ?>">
                 <input type="hidden" name="csv_data" value="<?= h($csvDataEncoded) ?>">
@@ -294,6 +298,7 @@ $positions = $db->query("SELECT id, nombre FROM positions WHERE activo = 1 ORDER
             <a href="?action=template" class="btn btn-link">Descargar plantilla CSV</a>
         </div>
         <form method="post" enctype="multipart/form-data" style="margin-top:16px;">
+            <input type="hidden" name="csrf_token" value="<?= $csrfToken ?? generateCSRFToken() ?>">
             <div class="form-group">
                 <label for="csv_file">Archivo CSV</label>
                 <input type="file" id="csv_file" name="csv_file" accept=".csv" required>

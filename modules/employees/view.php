@@ -181,7 +181,7 @@ $tipoLabels = [
                 <dd>
                     <?= h($emp['calle'] . ' ' . $emp['numero_exterior'] . ($emp['numero_interior'] ? ' Int. ' . $emp['numero_interior'] : '')) ?><br>
                     <?= h($emp['colonia'] ? $emp['colonia'] . ', ' : '') . h($emp['ciudad'] ? $emp['ciudad'] . ', ' : '') . h($emp['estado'] ?? '') ?>
-                    <?= $emp['codigo_postal'] ? ' C.P. ' . $emp['codigo_postal'] : '' ?>
+                    <?= $emp['codigo_postal'] ? ' C.P. ' . h($emp['codigo_postal']) : '' ?>
                 </dd>
             <?php endif; ?>
         </dl>
@@ -272,7 +272,7 @@ $tipoLabels = [
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:0.85rem;">
                         <div>
                             <span class="badge badge-<?= $l['estatus'] === 'aprobado' ? 'success' : ($l['estatus'] === 'pendiente' ? 'warning' : 'danger') ?>"><?= ucfirst($l['estatus']) ?></span>
-                            <?= $tipoLabels[$l['tipo']] ?? $l['tipo'] ?> (<?= (int)$l['dias_solicitados'] ?> días)
+                            <?= $tipoLabels[$l['tipo']] ?? h($l['tipo']) ?> (<?= (int)$l['dias_solicitados'] ?> días)
                         </div>
                         <span style="color:var(--color-text-secondary);"><?= formatDate($l['fecha_inicio']) ?></span>
                     </div>

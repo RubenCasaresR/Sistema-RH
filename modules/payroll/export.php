@@ -23,7 +23,8 @@ if (!$period) {
 }
 
 $stmt = $db->prepare("
-    SELECT pi.*, e.nombre, e.apellido_paterno, e.apellido_materno, e.curp, e.rfc, e.nss, e.puesto, e.departamento
+    SELECT pi.*, e.nombre, e.apellido_paterno, e.apellido_materno, e.curp, e.rfc, e.nss, e.puesto, e.departamento,
+           (SELECT SUM(monto) FROM payroll_bonus WHERE period_id = pi.period_id AND employee_id = pi.employee_id) AS bonos_total
     FROM payroll_items pi
     INNER JOIN employees e ON e.id = pi.employee_id
     WHERE pi.period_id = :pid
@@ -47,9 +48,10 @@ fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
 fputcsv($output, [
     'Nombre', 'CURP', 'RFC', 'NSS', 'Puesto', 'Departamento',
     'Salario Base', 'Salario Diario', 'Días Trabajados', 'Faltas', 'Retardos', 'Horas Extra',
-    'Salario Período', 'Pago Horas Extra', 'Aguinaldo Proporcional', 'Prima Vacacional',
+    'Horas Dobles', 'Horas Triples',
+    'Salario Período', 'Pago Horas Extra', 'Bonos', 'Aguinaldo Proporcional', 'Prima Vacacional',
     'Total Percepciones',
-    'ISR', 'IMSS Obrero', 'Descuento Faltas', 'Subsidio Empleo',
+    'ISR Bruto', 'Subsidio Empleo', 'ISR Neto', 'IMSS Obrero', 'Descuento Faltas',
     'Total Deducciones',
     'Sueldo Neto',
 ]);
@@ -65,9 +67,15 @@ function csvCell(string $value): string
 }
 
 foreach ($items as $i) {
-    $hePay = (int)$i['horas_extras'] * ((float)$i['salario_diario'] / 8) * 2;
+    $sd = (float)$i['salario_diario'];
+    $he = (int)$i['horas_extras'];
+    $hd = min(9, $he);
+    $ht = max(0, $he - 9);
+    $hePay = $hd * ($sd / 8) * 2 + $ht * ($sd / 8) * 3;
     $salarioPeriodo = (float)$i['salario_base'] / 30 * (int)$i['dias_trabajados'];
-    $descFaltas = (int)$i['faltas'] * (float)$i['salario_diario'];
+    $descFaltas = (int)$i['faltas'] * $sd;
+    $isrBruto = (float)$i['isr_retener'] + (float)$i['subsidio_empleo'];
+    $bonos = (float)($i['bonos_total'] ?? 0);
 
     fputcsv($output, [
         csvCell($i['nombre'] . ' ' . $i['apellido_paterno'] . ($i['apellido_materno'] ? ' ' . $i['apellido_materno'] : '')),
@@ -77,20 +85,24 @@ foreach ($items as $i) {
         csvCell($i['puesto'] ?? ''),
         csvCell($i['departamento'] ?? ''),
         csvCell(number_format((float)$i['salario_base'], 2)),
-        csvCell(number_format((float)$i['salario_diario'], 2)),
+        csvCell(number_format($sd, 2)),
         csvCell((string)(int)$i['dias_trabajados']),
         csvCell((string)(int)$i['faltas']),
         csvCell((string)(int)$i['retardos']),
-        csvCell((string)(int)$i['horas_extras']),
+        csvCell((string)(int)$he),
+        csvCell((string)$hd),
+        csvCell((string)$ht),
         csvCell(number_format($salarioPeriodo, 2)),
         csvCell(number_format($hePay, 2)),
+        csvCell(number_format($bonos, 2)),
         csvCell(number_format((float)$i['aguinaldo_proporcional'], 2)),
         csvCell(number_format((float)$i['prima_vacacional'], 2)),
         csvCell(number_format((float)$i['percepciones_total'], 2)),
+        csvCell(number_format($isrBruto, 2)),
+        csvCell(number_format((float)$i['subsidio_empleo'], 2)),
         csvCell(number_format((float)$i['isr_retener'], 2)),
         csvCell(number_format((float)$i['imss_obrero'], 2)),
         csvCell(number_format($descFaltas, 2)),
-        csvCell(number_format((float)$i['subsidio_empleo'], 2)),
         csvCell(number_format((float)$i['deducciones_total'], 2)),
         csvCell(number_format((float)$i['sueldo_neto'], 2)),
     ]);

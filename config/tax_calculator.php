@@ -48,6 +48,32 @@ function calculateISR(float $ingresoGravable, int $year = TAX_YEAR, string $tipo
     return round(max(0, $impuesto), 2);
 }
 
+function calculateSubsidioEmpleo(float $ingresoGravable, int $year = TAX_YEAR, string $tipo = 'mensual'): float
+{
+    $db = getDB();
+    $stmt = $db->prepare("
+        SELECT subsidio FROM tax_subsidio_tariff
+        WHERE ejercicio = :year AND tipo = :tipo
+          AND :ingreso1 >= limite_inferior AND :ingreso2 <= limite_superior
+        LIMIT 1
+    ");
+    $stmt->execute([':year' => $year, ':tipo' => $tipo, ':ingreso1' => $ingresoGravable, ':ingreso2' => $ingresoGravable]);
+    $row = $stmt->fetch();
+    return $row ? (float)$row['subsidio'] : 0;
+}
+
+function calculateISRNeto(float $ingresoGravable, int $year = TAX_YEAR, string $tipo = 'mensual'): array
+{
+    $isr = calculateISR($ingresoGravable, $year, $tipo);
+    $subsidio = calculateSubsidioEmpleo($ingresoGravable, $year, $tipo);
+    $isrNeto = round(max(0, $isr - $subsidio), 2);
+    return [
+        'isr'       => $isr,
+        'subsidio'  => $subsidio,
+        'isr_neto'  => $isrNeto,
+    ];
+}
+
 function calculateIMSSObrero(float $salarioDiario, int $diasDelPeriodo, int $year = TAX_YEAR): float
 {
     $uma = getUMA($year);
@@ -117,12 +143,32 @@ function calculatePrimaVacacionalProporcional(
     return round($primaPeriodo, 2);
 }
 
+function getPayrollBonuses(int $periodId, int $employeeId): array
+{
+    $db = getDB();
+    $stmt = $db->prepare("SELECT concepto, monto FROM payroll_bonus WHERE period_id = :pid AND employee_id = :eid");
+    $stmt->execute([':pid' => $periodId, ':eid' => $employeeId]);
+    return $stmt->fetchAll();
+}
+
+function getPayrollAdjustments(int $periodId, int $employeeId): array
+{
+    $db = getDB();
+    $stmt = $db->prepare("
+        SELECT tipo, concepto, monto FROM payroll_adjustments
+        WHERE period_id = :pid AND employee_id = :eid
+    ");
+    $stmt->execute([':pid' => $periodId, ':eid' => $employeeId]);
+    return $stmt->fetchAll();
+}
+
 function calculatePayrollForEmployee(
     array $employee,
     string $fechaIngreso,
     string $periodoInicio,
     string $periodoFin,
-    int $diasDelPeriodo
+    int $diasDelPeriodo,
+    int $periodId = 0
 ): array {
     $salarioBase = (float)$employee['salario_base'];
     $salarioDiario = $salarioBase / 30;
@@ -149,24 +195,75 @@ function calculatePayrollForEmployee(
     $faltas = max(0, (int)($asis['faltas'] ?? 0));
     $retardos = max(0, (int)($asis['retardos'] ?? 0));
     $horasExtra = max(0, (int)($asis['horas_extra'] ?? 0));
-    $diasTrabajados = max(0, $diasDelPeriodo - $faltas);
 
+    // Ajustes manuales
+    if ($periodId > 0) {
+        $adjustments = getPayrollAdjustments($periodId, $eid);
+        foreach ($adjustments as $adj) {
+            switch ($adj['tipo']) {
+                case 'falta':
+                    $faltas += (int)$adj['monto'];
+                    break;
+                case 'retardo':
+                    $retardos += (int)$adj['monto'];
+                    break;
+                case 'hora_extra':
+                    $horasExtra += (int)$adj['monto'];
+                    break;
+            }
+        }
+    }
+
+    $diasTrabajados = max(0, $diasDelPeriodo - $faltas);
     $salarioPeriodo = $salarioDiario * $diasTrabajados;
-    $pagoHorasExtra = $horasExtra * ($salarioDiario / 8) * 2;
     $descuentoFaltas = $faltas * $salarioDiario;
+
+    // Horas extra: dobles (primeras 9) y triples (subsecuentes)
+    $horasDobles = min(9, $horasExtra);
+    $horasTriples = max(0, $horasExtra - 9);
+    $pagoHorasExtra = $horasDobles * ($salarioDiario / 8) * 2 + $horasTriples * ($salarioDiario / 8) * 3;
 
     $aguinaldoProp = calculateAguinaldoProporcional($salarioDiario, $fechaIngreso, $periodoInicio, $periodoFin);
     $primaVacProp = calculatePrimaVacacionalProporcional($salarioDiario, $fechaIngreso, $periodoInicio, $periodoFin);
 
-    $percepciones = $salarioPeriodo + $pagoHorasExtra + $aguinaldoProp + $primaVacProp;
-    $ingresoMensual = $salarioBase + $pagoHorasExtra + $aguinaldoProp + $primaVacProp;
+    // Bonos desde payroll_bonus
+    $totalBonos = 0;
+    $bonosDetalle = [];
+    if ($periodId > 0) {
+        $bonos = getPayrollBonuses($periodId, $eid);
+        foreach ($bonos as $b) {
+            $monto = (float)$b['monto'];
+            $totalBonos += $monto;
+            $bonosDetalle[] = $b['concepto'] . ': $' . number_format($monto, 2);
+        }
+    }
 
-    $isr = calculateISR($ingresoMensual);
+    $percepciones = $salarioPeriodo + $pagoHorasExtra + $aguinaldoProp + $primaVacProp + $totalBonos;
+    $ingresoMensual = $salarioBase + $pagoHorasExtra + $aguinaldoProp + $primaVacProp + $totalBonos;
+
+    // ISR neto con subsidio al empleo
+    $isrCalc = calculateISRNeto($ingresoMensual);
+    $isr = $isrCalc['isr_neto'];
+    $subsidio = $isrCalc['subsidio'];
+
     $imss = calculateIMSSObrero($salarioDiario, $diasDelPeriodo);
 
-    $subsidio = 0;
+    // Deducciones manuales
+    $deduccionesAdicionales = 0;
+    $percepcionesAdicionales = 0;
+    if ($periodId > 0) {
+        $adjustments = getPayrollAdjustments($periodId, $eid);
+        foreach ($adjustments as $adj) {
+            if ($adj['tipo'] === 'percepcion') {
+                $percepcionesAdicionales += (float)$adj['monto'];
+            } elseif ($adj['tipo'] === 'deduccion') {
+                $deduccionesAdicionales += (float)$adj['monto'];
+            }
+        }
+    }
 
-    $deducciones = $isr + $imss + $descuentoFaltas;
+    $percepciones += $percepcionesAdicionales;
+    $deducciones = $isr + $imss + $descuentoFaltas + $deduccionesAdicionales;
     $sueldoNeto = round(max(0, $percepciones - $deducciones), 2);
     $totalIncidencias = round($descuentoFaltas - $pagoHorasExtra, 2);
 
@@ -178,12 +275,18 @@ function calculatePayrollForEmployee(
         'faltas'                => $faltas,
         'retardos'              => $retardos,
         'horas_extras'          => $horasExtra,
-        'total_bonos'           => 0,
+        'horas_dobles'          => $horasDobles,
+        'horas_triples'         => $horasTriples,
+        'total_bonos'           => $totalBonos,
+        'bonos_detalle'         => $bonosDetalle,
         'pago_horas_extra'      => round($pagoHorasExtra, 2),
         'aguinaldo_proporcional'=> $aguinaldoProp,
         'prima_vacacional'      => $primaVacProp,
+        'percepciones_adicionales' => $percepcionesAdicionales,
+        'deducciones_adicionales'  => $deduccionesAdicionales,
         'percepciones_total'    => round($percepciones, 2),
         'isr_retener'           => $isr,
+        'isr_bruto'             => $isrCalc['isr'],
         'imss_obrero'           => $imss,
         'subsidio_empleo'       => round($subsidio, 2),
         'descuento_faltas'      => round($descuentoFaltas, 2),

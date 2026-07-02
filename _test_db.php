@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require 'C:\xampp\htdocs\Sistema RH\config\app.php';
 require 'C:\xampp\htdocs\Sistema RH\config\database.php';
 try {

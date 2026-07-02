@@ -75,6 +75,7 @@ $csrfToken = generateCSRFToken();
         btn.textContent = 'Cambiando...';
 
         const data = {
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
             current_password: document.getElementById('current_password').value,
             new_password: document.getElementById('new_password').value,
             confirm_password: document.getElementById('confirm_password').value

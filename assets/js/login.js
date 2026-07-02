@@ -1,6 +1,6 @@
 /**
  * Login — Manejo del formulario de inicio de sesión.
- * Envío asíncrono (AJAX) con fetch, sin recargar la página.
+ * Toggle de contraseña, remember me, animaciones, envío AJAX.
  */
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -9,21 +9,54 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const errorDiv = document.getElementById('loginError');
     const submitBtn = document.getElementById('loginBtn');
+    const passwordInput = document.getElementById('password');
+    const passwordToggle = document.getElementById('passwordToggle');
 
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('expired') === '1') {
-        showError('Sesión expirada por inactividad. Inicia sesión nuevamente.');
+    // --- Animación de shake en el container ---
+    function shakeContainer() {
+        const container = document.querySelector('.login-container');
+        if (container) {
+            container.classList.remove('shake');
+            void container.offsetWidth;
+            container.classList.add('shake');
+            setTimeout(function () {
+                container.classList.remove('shake');
+            }, 500);
+        }
     }
 
+    // --- Toggle de visibilidad de contraseña ---
+    if (passwordToggle && passwordInput) {
+        passwordToggle.addEventListener('click', function () {
+            const isPassword = passwordInput.type === 'password';
+            passwordInput.type = isPassword ? 'text' : 'password';
+            passwordToggle.classList.toggle('visible', !isPassword);
+            passwordToggle.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        });
+    }
+
+    // --- Marcar input como "filled" cuando tiene valor ---
+    document.querySelectorAll('.login-form input').forEach(function (input) {
+        input.addEventListener('input', function () {
+            this.classList.toggle('filled', this.value.trim() !== '');
+        });
+
+        if (input.value.trim() !== '') {
+            input.classList.add('filled');
+        }
+    });
+
+    // --- Submit del formulario ---
     form.addEventListener('submit', async function (e) {
         e.preventDefault();
 
         const username = document.getElementById('username').value.trim();
-        const password = document.getElementById('password').value;
+        const password = passwordInput.value;
+        const rememberMe = document.getElementById('remember_me').checked;
 
-        // Validación simple en cliente
         if (!username || !password) {
             showError('Por favor complete todos los campos.');
+            shakeContainer();
             return;
         }
 
@@ -34,7 +67,12 @@ document.addEventListener('DOMContentLoaded', function () {
             const response = await fetch(APP_URL + '/api/auth.php?action=login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: username, password: password })
+                body: JSON.stringify({
+                    username: username,
+                    password: password,
+                    remember_me: rememberMe,
+                    csrf_token: document.querySelector('input[name="csrf_token"]').value
+                })
             });
 
             const data = await response.json();
@@ -43,6 +81,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 window.location.href = APP_URL + '/modules/reports/dashboard.php';
             } else {
                 showError(data.message || 'Credenciales inválidas.');
+                shakeContainer();
                 setLoading(false);
             }
         } catch (err) {
@@ -51,6 +90,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    // --- Funciones auxiliares ---
     function showError(msg) {
         if (errorDiv) {
             errorDiv.textContent = msg;
@@ -68,6 +108,6 @@ document.addEventListener('DOMContentLoaded', function () {
     function setLoading(loading) {
         if (!submitBtn) return;
         submitBtn.disabled = loading;
-        submitBtn.textContent = loading ? 'Entrando...' : 'Entrar';
+        submitBtn.classList.toggle('loading', loading);
     }
 });
