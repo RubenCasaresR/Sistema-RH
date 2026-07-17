@@ -421,6 +421,7 @@ $csrfToken = generateCSRFToken();
                         <option value="Temporal" <?= ($old['tipo_contrato'] ?? '') === 'Temporal' ? 'selected' : '' ?>>Temporal</option>
                         <option value="Honorarios" <?= ($old['tipo_contrato'] ?? '') === 'Honorarios' ? 'selected' : '' ?>>Honorarios</option>
                         <option value="Outsourcing" <?= ($old['tipo_contrato'] ?? '') === 'Outsourcing' ? 'selected' : '' ?>>Outsourcing</option>
+                        <option value="Becario" <?= ($old['tipo_contrato'] ?? '') === 'Becario' ? 'selected' : '' ?>>Becario</option>
                     </select>
                 </div>
             </div>

@@ -8,12 +8,6 @@ AddDefaultCharset UTF-8
 # Denegar listado de directorios
 Options -Indexes
 
-# Denegar acceso a directorios sensibles
-RedirectMatch 403 ^/config/.*$
-RedirectMatch 403 ^/includes/.*$
-RedirectMatch 403 ^/sql/.*$
-RedirectMatch 403 ^/uploads/.*$
-
 # Proteger archivo .htaccess
 <FilesMatch "^\.ht">
     Require all denied
@@ -22,7 +16,12 @@ RedirectMatch 403 ^/uploads/.*$
 # Redirigir todo al index.php (single entry point)
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /Sistema%20RH/
+    RewriteBase /
+
+    # Denegar acceso directo a directorios sensibles
+    RewriteRule ^config/.*$ - [F,L]
+    RewriteRule ^includes/.*$ - [F,L]
+    RewriteRule ^sql/.*$ - [F,L]
 
     # Si el archivo o directorio existe, servirlo directamente
     RewriteCond %{REQUEST_FILENAME} !-f

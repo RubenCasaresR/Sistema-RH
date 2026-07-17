@@ -22,6 +22,8 @@ $csrfToken = generateCSRFToken();
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/main.css?v=<?= APP_VERSION ?>">
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/login.css?v=<?= APP_VERSION ?>">
+    <link rel="icon" type="image/svg+xml" href="<?= APP_URL ?>/assets/favicon.svg">
+    <meta name="base-url" content="<?= APP_URL ?>">
 </head>
 <body class="login-page">
     <div class="login-container">
@@ -86,7 +88,7 @@ $csrfToken = generateCSRFToken();
             if (res.success) {
                 okDiv.textContent = res.message;
                 okDiv.style.display = 'block';
-                setTimeout(() => { window.location.href = '<?= APP_URL ?>'; }, 1500);
+                setTimeout(() => { window.location.href = '<?= APP_URL ?>/modules/reports/dashboard.php'; }, 1500);
             } else {
                 errDiv.textContent = res.message;
                 errDiv.style.display = 'block';

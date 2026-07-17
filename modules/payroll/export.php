@@ -51,7 +51,7 @@ fputcsv($output, [
     'Horas Dobles', 'Horas Triples',
     'Salario Período', 'Pago Horas Extra', 'Bonos', 'Aguinaldo Proporcional', 'Prima Vacacional',
     'Total Percepciones',
-    'ISR Bruto', 'Subsidio Empleo', 'ISR Neto', 'IMSS Obrero', 'Descuento Faltas',
+    'ISR Bruto', 'Subsidio Empleo', 'ISR Neto', 'IMSS Obrero', 'Descuento Faltas', 'Descuento Retardos',
     'Total Deducciones',
     'Sueldo Neto',
 ]);
@@ -74,6 +74,7 @@ foreach ($items as $i) {
     $hePay = $hd * ($sd / 8) * 2 + $ht * ($sd / 8) * 3;
     $salarioPeriodo = (float)$i['salario_base'] / 30 * (int)$i['dias_trabajados'];
     $descFaltas = (int)$i['faltas'] * $sd;
+    $descRetardos = (float)$i['descuento_retardos'];
     $isrBruto = (float)$i['isr_retener'] + (float)$i['subsidio_empleo'];
     $bonos = (float)($i['bonos_total'] ?? 0);
 
@@ -103,6 +104,7 @@ foreach ($items as $i) {
         csvCell(number_format((float)$i['isr_retener'], 2)),
         csvCell(number_format((float)$i['imss_obrero'], 2)),
         csvCell(number_format($descFaltas, 2)),
+        csvCell(number_format($descRetardos, 2)),
         csvCell(number_format((float)$i['deducciones_total'], 2)),
         csvCell(number_format((float)$i['sueldo_neto'], 2)),
     ]);

@@ -17,7 +17,7 @@ $perPage = 20;
 
 $departments = $db->query("SELECT DISTINCT departamento FROM employees WHERE departamento IS NOT NULL AND departamento != '' ORDER BY departamento")->fetchAll(PDO::FETCH_COLUMN);
 
-$tiposContrato = ['Base', 'Confianza', 'Temporal', 'Honorarios', 'Outsourcing'];
+$tiposContrato = ['Base', 'Confianza', 'Temporal', 'Honorarios', 'Outsourcing', 'Becario'];
 
 $where = 'WHERE 1=1';
 $params = [];

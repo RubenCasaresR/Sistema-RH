@@ -399,7 +399,7 @@ $tipoLabels = [
                                 <td><?= formatDate($ch['created_at']) ?></td>
                                 <td><?= h($ch['tipo_contrato_anterior'] ?? '—') ?></td>
                                 <td><span class="badge badge-info"><?= h($ch['tipo_contrato_nuevo']) ?></span></td>
-                                <td><?= $ch['fecha_inicio'] ? formatDate($ch['fecha_inicio']) : '—' ?> <?= $ch['fecha_fin'] ? '→ ' . formatDate($ch['fecha_fin']) : ($ch['tipo_contrato_nuevo'] !== 'Temporal' ? '(Indefinido)' : '') ?></td>
+                                <td><?= $ch['fecha_inicio'] ? formatDate($ch['fecha_inicio']) : '—' ?> <?= $ch['fecha_fin'] ? '→ ' . formatDate($ch['fecha_fin']) : (($ch['tipo_contrato_nuevo'] !== 'Temporal' && $ch['tipo_contrato_nuevo'] !== 'Becario') ? '(Indefinido)' : '') ?></td>
                                 <td><?= h($ch['motivo'] ?? '—') ?></td>
                                 <td><?= h($ch['modificado_por_name'] ?? '—') ?></td>
                             </tr>

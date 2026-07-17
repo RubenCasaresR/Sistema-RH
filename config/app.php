@@ -26,7 +26,23 @@ function env(string $key, mixed $default = null): mixed
     return $_ENV[$key] ?? getenv($key) ?: $default;
 }
 
-define('APP_URL', env('APP_URL', 'http://localhost/Sistema%20RH'));
+if (!empty($_SERVER['HTTP_HOST'])) {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'];
+    $docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT']), '/');
+    $appDir = rtrim(dirname(str_replace('\\', '/', __DIR__)), '/');
+    if (str_starts_with($appDir, $docRoot)) {
+        $relativePath = substr($appDir, strlen($docRoot));
+        $segments = explode('/', ltrim($relativePath, '/'));
+        $encodedSegments = array_map('rawurlencode', $segments);
+        $basePath = '/' . implode('/', $encodedSegments);
+        define('APP_URL', rtrim($scheme . '://' . $host . $basePath, '/'));
+    } else {
+        define('APP_URL', env('APP_URL', 'http://localhost/Sistema%20RH'));
+    }
+} else {
+    define('APP_URL', env('APP_URL', 'http://localhost/Sistema%20RH'));
+}
 define('APP_NAME', env('APP_NAME', 'Sistema Integral RH'));
 define('APP_ENV', env('APP_ENV', 'development'));
 

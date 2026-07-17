@@ -3,7 +3,7 @@
  * Toggle de sidebar, notificaciones, helpers.
  */
 
-const APP_URL = document.location.origin + '/Sistema%20RH';
+const APP_URL = document.querySelector('meta[name="base-url"]')?.content || document.location.origin;
 
 document.addEventListener('DOMContentLoaded', function () {
     initSidebar();
