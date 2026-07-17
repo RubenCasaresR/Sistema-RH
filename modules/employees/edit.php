@@ -403,7 +403,7 @@ $emp = $old ?: $employee;
                 <div class="form-group"><label for="salario_base">Salario base ($)</label><input type="text" id="salario_base" name="salario_base" value="<?= h($emp['salario_base']) ?>"></div>
                 <div class="form-group"><label for="tipo_contrato">Contrato</label>
                     <select id="tipo_contrato" name="tipo_contrato">
-                        <?php foreach (['Base','Confianza','Temporal','Honorarios','Outsourcing'] as $tc): ?>
+                        <?php foreach (['Base','Confianza','Temporal','Honorarios','Outsourcing','Becario'] as $tc): ?>
                             <option value="<?= $tc ?>" <?= $emp['tipo_contrato'] === $tc ? 'selected' : '' ?>><?= $tc ?></option>
                         <?php endforeach; ?>
                     </select>
@@ -524,7 +524,7 @@ if (tipoContrato) {
     tipoContrato.addEventListener('change', function() {
         const changed = this.value !== contratoOriginal;
         document.getElementById('contract-reason-field').style.display = changed ? 'block' : 'none';
-        document.getElementById('contract-end-field').style.display = (changed && this.value === 'Temporal') ? 'block' : 'none';
+        document.getElementById('contract-end-field').style.display = (changed && (this.value === 'Temporal' || this.value === 'Becario')) ? 'block' : 'none';
     });
 }
 </script>

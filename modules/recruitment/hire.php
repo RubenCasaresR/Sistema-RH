@@ -123,7 +123,7 @@ $csrfToken = generateCSRFToken();
             <div class="form-group"><label for="salario_base">Salario base ($)</label><input type="text" id="salario_base" name="salario_base"></div>
             <div class="form-group"><label for="tipo_contrato">Contrato</label>
                 <select id="tipo_contrato" name="tipo_contrato">
-                    <?php foreach (['Base','Confianza','Temporal','Honorarios','Outsourcing'] as $tc): ?>
+                    <?php foreach (['Base','Confianza','Temporal','Honorarios','Outsourcing','Becario'] as $tc): ?>
                         <option value="<?= $tc ?>"><?= $tc ?></option>
                     <?php endforeach; ?>
                 </select>

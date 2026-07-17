@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS employees (
     departamento VARCHAR(100) DEFAULT NULL,
     fecha_ingreso DATE DEFAULT NULL,
     salario_base DECIMAL(12,2) DEFAULT NULL,
-    tipo_contrato ENUM('Base', 'Confianza', 'Temporal', 'Honorarios', 'Outsourcing') DEFAULT 'Base',
+    tipo_contrato ENUM('Base', 'Confianza', 'Temporal', 'Honorarios', 'Outsourcing', 'Becario') DEFAULT 'Base',
     -- Control
     foto_url VARCHAR(255) DEFAULT NULL,
     notas TEXT DEFAULT NULL,

@@ -58,6 +58,7 @@ function can(string $permission): bool
 {
     $user = currentUser();
     if (!$user) return false;
+    if (empty($user['role_name'])) return false;
     return hasPermission($user['role_name'], $permission);
 }
 

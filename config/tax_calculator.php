@@ -98,6 +98,13 @@ function getVacationDays(int $yearsOfWork): int
     return 20 + (int)(floor(($yearsOfWork - 5) / 5) + 1) * 2;
 }
 
+function calculateRetardoDeduction(int $retardos): float
+{
+    if ($retardos <= 0) return 0;
+    $costoUnitario = max(100, ($retardos - 2) * 100);
+    return $retardos * $costoUnitario;
+}
+
 function calculateAguinaldoProporcional(
     float $salarioDiario,
     string $fechaIngreso,
@@ -168,7 +175,8 @@ function calculatePayrollForEmployee(
     string $periodoInicio,
     string $periodoFin,
     int $diasDelPeriodo,
-    int $periodId = 0
+    int $periodId = 0,
+    string $tipoPeriodo = 'mensual'
 ): array {
     $salarioBase = (float)$employee['salario_base'];
     $salarioDiario = $salarioBase / 30;
@@ -177,10 +185,21 @@ function calculatePayrollForEmployee(
     $db = getDB();
     $eid = (int)$employee['id'];
 
+    // Determinar el inicio real considerando la fecha de ingreso del empleado
+    $inicioReal = $periodoInicio;
+    if ($fechaIngreso && $fechaIngreso > $periodoInicio) {
+        $inicioReal = $fechaIngreso;
+    }
+    $diasDelPeriodoReal = $diasDelPeriodo;
+    if ($inicioReal !== $periodoInicio) {
+        $diasDelPeriodoReal = max(1, (new DateTime($periodoFin))->diff(new DateTime($inicioReal))->days + 1);
+    }
+
     $stmtA = $db->prepare("
         SELECT
             COUNT(*) AS total_dias,
-            SUM(CASE WHEN hora_entrada IS NULL THEN 1 ELSE 0 END) AS faltas,
+            SUM(CASE WHEN hora_entrada IS NULL THEN 1 ELSE 0 END) AS faltas_con_registro,
+            SUM(CASE WHEN hora_entrada IS NOT NULL AND hora_salida IS NOT NULL THEN 1 ELSE 0 END) AS dias_completos,
             SUM(CASE WHEN hora_entrada IS NOT NULL AND HOUR(hora_entrada) >= 9 AND MINUTE(hora_entrada) > 5 THEN 1 ELSE 0 END) AS retardos,
             SUM(CASE WHEN hora_entrada IS NOT NULL AND hora_salida IS NOT NULL
                 THEN TIMESTAMPDIFF(HOUR, hora_entrada, hora_salida) - 8 ELSE 0 END) AS horas_extra
@@ -189,12 +208,17 @@ function calculatePayrollForEmployee(
           AND fecha BETWEEN :inicio AND :fin
           AND tipo = 'regular'
     ");
-    $stmtA->execute([':eid' => $eid, ':inicio' => $periodoInicio, ':fin' => $periodoFin]);
+    $stmtA->execute([':eid' => $eid, ':inicio' => $inicioReal, ':fin' => $periodoFin]);
     $asis = $stmtA->fetch();
 
-    $faltas = max(0, (int)($asis['faltas'] ?? 0));
+    $diasConRegistro = (int)($asis['total_dias'] ?? 0);
+    $faltasConRegistro = max(0, (int)($asis['faltas_con_registro'] ?? 0));
+    $diasCompletos = max(0, (int)($asis['dias_completos'] ?? 0));
     $retardos = max(0, (int)($asis['retardos'] ?? 0));
     $horasExtra = max(0, (int)($asis['horas_extra'] ?? 0));
+
+    // Días sin ningún registro en el checador se consideran faltas
+    $faltas = max(0, $diasDelPeriodoReal - $diasConRegistro + $faltasConRegistro);
 
     // Ajustes manuales
     if ($periodId > 0) {
@@ -214,9 +238,11 @@ function calculatePayrollForEmployee(
         }
     }
 
-    $diasTrabajados = max(0, $diasDelPeriodo - $faltas);
+    $descuentoRetardos = calculateRetardoDeduction($retardos);
+
+    $diasTrabajados = max(0, $diasCompletos);
     $salarioPeriodo = $salarioDiario * $diasTrabajados;
-    $descuentoFaltas = $faltas * $salarioDiario;
+    $descuentoFaltas = 0;
 
     // Horas extra: dobles (primeras 9) y triples (subsecuentes)
     $horasDobles = min(9, $horasExtra);
@@ -239,10 +265,10 @@ function calculatePayrollForEmployee(
     }
 
     $percepciones = $salarioPeriodo + $pagoHorasExtra + $aguinaldoProp + $primaVacProp + $totalBonos;
-    $ingresoMensual = $salarioBase + $pagoHorasExtra + $aguinaldoProp + $primaVacProp + $totalBonos;
+    $ingresoGravable = $salarioBase / ($tipoPeriodo === 'quincenal' ? 2 : 1) + $pagoHorasExtra + $aguinaldoProp + $primaVacProp + $totalBonos;
 
     // ISR neto con subsidio al empleo
-    $isrCalc = calculateISRNeto($ingresoMensual);
+    $isrCalc = calculateISRNeto($ingresoGravable, TAX_YEAR, $tipoPeriodo);
     $isr = $isrCalc['isr_neto'];
     $subsidio = $isrCalc['subsidio'];
 
@@ -263,9 +289,9 @@ function calculatePayrollForEmployee(
     }
 
     $percepciones += $percepcionesAdicionales;
-    $deducciones = $isr + $imss + $descuentoFaltas + $deduccionesAdicionales;
+    $deducciones = $isr + $imss + $descuentoRetardos + $deduccionesAdicionales;
     $sueldoNeto = round(max(0, $percepciones - $deducciones), 2);
-    $totalIncidencias = round($descuentoFaltas - $pagoHorasExtra, 2);
+    $totalIncidencias = round($descuentoRetardos - $pagoHorasExtra, 2);
 
     return [
         'salario_base'          => $salarioBase,
@@ -290,6 +316,7 @@ function calculatePayrollForEmployee(
         'imss_obrero'           => $imss,
         'subsidio_empleo'       => round($subsidio, 2),
         'descuento_faltas'      => round($descuentoFaltas, 2),
+        'descuento_retardos'    => $descuentoRetardos,
         'total_deducciones'     => round($deducciones, 2),
         'sueldo_bruto'          => round($percepciones, 2),
         'sueldo_neto'           => $sueldoNeto,

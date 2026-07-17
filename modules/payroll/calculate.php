@@ -92,12 +92,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $insertStmt = $db->prepare("
             INSERT INTO payroll_items
                 (period_id, employee_id, salario_base, salario_diario, total_bonos, total_deducciones, total_incidencias,
-                 sueldo_bruto, sueldo_neto, dias_trabajados, faltas, retardos, horas_extras,
+                 sueldo_bruto, sueldo_neto, dias_trabajados, faltas, retardos, descuento_retardos, horas_extras,
                  isr_retener, imss_obrero, subsidio_empleo, aguinaldo_proporcional, prima_vacacional,
                  percepciones_total, deducciones_total)
             VALUES
                 (:pid, :eid, :sb, :sd, :bonos, :td, :ti,
-                 :bruto, :neto, :dt, :faltas, :retardos, :he,
+                 :bruto, :neto, :dt, :faltas, :retardos, :dr, :he,
                  :isr, :imss, :subsidio, :aguinaldo, :prima,
                  :perc, :ded)
         ");
@@ -109,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $totalPrima = 0;
         $empleadosProcesados = 0;
         $diasDelPeriodo = (new DateTime($period['fecha_fin']))->diff(new DateTime($period['fecha_inicio']))->days + 1;
+        $tipoPeriodo = $period['tipo_periodo'] ?? 'mensual';
 
         foreach ($emps as $emp) {
             $fechaIngreso = $emp['fecha_ingreso'] ?? $period['fecha_inicio'];
@@ -118,7 +119,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $period['fecha_inicio'],
                 $period['fecha_fin'],
                 $diasDelPeriodo,
-                $periodId
+                $periodId,
+                $tipoPeriodo
             );
 
             $insertStmt->execute([
@@ -134,6 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 ':dt'        => $calc['dias_trabajados'],
                 ':faltas'    => $calc['faltas'],
                 ':retardos'  => $calc['retardos'],
+                ':dr'        => $calc['descuento_retardos'],
                 ':he'        => $calc['horas_extras'],
                 ':isr'       => $calc['isr_retener'],
                 ':imss'      => $calc['imss_obrero'],
@@ -212,6 +215,7 @@ $totales = [
     'aguinaldo' => array_sum(array_column($items, 'aguinaldo_proporcional')),
     'prima'     => array_sum(array_column($items, 'prima_vacacional')),
     'faltas'    => array_sum(array_column($items, 'faltas')),
+    'retardos'  => array_sum(array_column($items, 'retardos')),
     'he'        => array_sum(array_column($items, 'horas_extras')),
     'bonos'     => array_sum(array_column($items, 'total_bonos')),
     'deducciones' => array_sum(array_column($items, 'deducciones_total')),
@@ -302,6 +306,7 @@ $csrfToken = generateCSRFToken();
                     <th rowspan="2">Puesto</th>
                     <th rowspan="2">Salario diario</th>
                     <th rowspan="2">Días</th>
+                    <th rowspan="2">Faltas</th>
                     <th colspan="5">Percepciones</th>
                     <th colspan="3">Deducciones</th>
                     <th rowspan="2">Sueldo neto</th>
@@ -315,12 +320,12 @@ $csrfToken = generateCSRFToken();
                     <th>Prima vac.</th>
                     <th>ISR</th>
                     <th>IMSS</th>
-                    <th>Faltas</th>
+                    <th>Retardos</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (count($items) === 0): ?>
-                    <tr><td colspan="14" class="empty-state">
+                    <tr><td colspan="15" class="empty-state">
                         Sin datos. <?= $period['estatus'] === 'abierto' ? 'Presiona "Calcular nómina" para procesar.' : '' ?>
                     </td></tr>
                 <?php else: ?>
@@ -337,6 +342,9 @@ $csrfToken = generateCSRFToken();
                             <td><?= h($i['puesto'] ?? '—') ?></td>
                             <td class="text-right"><?= formatCurrency($sd) ?></td>
                             <td class="text-center"><?= (int)$i['dias_trabajados'] ?> / <?= (int)$i['dias_trabajados'] + (int)$i['faltas'] ?></td>
+                            <td class="text-center">
+                                <span class="badge badge-<?= $i['faltas'] > 0 ? 'danger' : 'success' ?>"><?= (int)$i['faltas'] ?></span>
+                            </td>
                             <td class="text-right"><?= formatCurrency($sd * (int)$i['dias_trabajados']) ?></td>
                             <td class="text-right" title="<?= $hd ?>h dobles + <?= $ht ?>h triples"><?= $he > 0 ? formatCurrency($horasExtraPay) : '—' ?></td>
                             <td class="text-right"><?= (float)$i['total_bonos'] > 0 ? formatCurrency((float)$i['total_bonos']) : '—' ?></td>
@@ -345,7 +353,8 @@ $csrfToken = generateCSRFToken();
                             <td class="text-right" title="ISR bruto: <?= formatCurrency((float)$i['isr_retener'] + (float)$i['subsidio_empleo']) ?>, Subsidio: <?= formatCurrency((float)$i['subsidio_empleo']) ?>"><?= formatCurrency((float)$i['isr_retener']) ?></td>
                             <td class="text-right"><?= formatCurrency((float)$i['imss_obrero']) ?></td>
                             <td class="text-center">
-                                <span class="badge badge-<?= $i['faltas'] > 0 ? 'danger' : 'success' ?>"><?= (int)$i['faltas'] ?></span>
+                                <span class="badge badge-<?= (int)$i['retardos'] > 0 ? 'warning' : 'success' ?>"><?= (int)$i['retardos'] ?></span>
+                                <?php if ((float)$i['descuento_retardos'] > 0): ?><br><small style="color:var(--color-danger);"><?= formatCurrency((float)$i['descuento_retardos']) ?></small><?php endif; ?>
                             </td>
                             <td class="text-right"><strong><?= formatCurrency((float)$i['sueldo_neto']) ?></strong></td>
                             <td><button type="button" class="btn btn-sm btn-ghost" onclick="openRecibo(<?= $idx ?>)">Recibo</button></td>
@@ -356,7 +365,8 @@ $csrfToken = generateCSRFToken();
             <?php if ($totales['empleados'] > 0): ?>
             <tfoot>
                 <tr>
-                    <th colspan="4">Totales</th>
+                    <th colspan="5">Totales</th>
+                    <th class="text-center"><?= (int)$totales['faltas'] ?></th>
                     <th class="text-right"><?= formatCurrency(array_sum(array_map(function($i) { return (float)$i['salario_base'] / 30 * (int)$i['dias_trabajados']; }, $items))) ?></th>
                     <th class="text-right"><?= formatCurrency(array_sum(array_map(function($i) { $sd = (float)$i['salario_diario']; $he = (int)$i['horas_extras']; $hd = min(9, $he); $ht = max(0, $he - 9); return $hd * ($sd / 8) * 2 + $ht * ($sd / 8) * 3; }, $items))) ?></th>
                     <th class="text-right"><?= formatCurrency(array_sum(array_column($items, 'total_bonos'))) ?></th>
@@ -364,7 +374,7 @@ $csrfToken = generateCSRFToken();
                     <th class="text-right"><?= formatCurrency($totales['prima']) ?></th>
                     <th class="text-right"><?= formatCurrency($totales['isr']) ?></th>
                     <th class="text-right"><?= formatCurrency($totales['imss']) ?></th>
-                    <th class="text-center"><?= (int)$totales['faltas'] ?></th>
+                    <th class="text-center"><?= (int)$totales['retardos'] ?></th>
                     <th class="text-right"><strong><?= formatCurrency($totales['neto']) ?></strong></th>
                     <th></th>
                 </tr>
@@ -521,7 +531,7 @@ function mostrarDesglose(idx) {
     const hd = Math.min(9, he);
     const ht = Math.max(0, he - 9);
     const hePay = hd * (sd / 8) * 2 + ht * (sd / 8) * 3;
-    const descFaltas = parseInt(i.faltas) * sd;
+    const descRetardos = parseFloat(i.descuento_retardos) || 0;
     const tieneBonos = parseFloat(i.total_bonos) > 0;
     container.innerHTML = `
     <div class="payroll-breakdown">
@@ -539,7 +549,8 @@ function mostrarDesglose(idx) {
             <div class="breakdown-row"><span>ISR (LISR Art. 96)</span><span>—${fmt(i.isr_retener)}</span></div>
             ${parseFloat(i.subsidio_empleo) > 0 ? `<div class="breakdown-row" style="color:var(--color-success);"><span>Subsidio al empleo</span><span>+${fmt(i.subsidio_empleo)}</span></div>` : ''}
             <div class="breakdown-row"><span>IMSS (cuota obrera)</span><span>—${fmt(i.imss_obrero)}</span></div>
-            ${i.faltas > 0 ? `<div class="breakdown-row"><span>Faltas (${i.faltas} × $${sd.toFixed(2)})</span><span>—${fmt(descFaltas)}</span></div>` : ''}
+            ${i.faltas > 0 ? `<div class="breakdown-row"><span>Faltas (${i.faltas} días no laborados)</span><span>—</span></div>` : ''}
+            ${descRetardos > 0 ? `<div class="breakdown-row"><span>Retardos (${i.retardos})</span><span>—${fmt(descRetardos)}</span></div>` : ''}
             <div class="breakdown-row breakdown-total"><span>Total deducciones</span><span>—${fmt(i.deducciones_total)}</span></div>
         </div>
         <div class="breakdown-section breakdown-net">
@@ -572,7 +583,7 @@ function openRecibo(idx) {
     const hd = Math.min(9, he);
     const ht = Math.max(0, he - 9);
     const hePay = hd * (sd / 8) * 2 + ht * (sd / 8) * 3;
-    const descFaltas = parseInt(i.faltas) * sd;
+    const descRetardos = parseFloat(i.descuento_retardos) || 0;
     const tieneBonos = parseFloat(i.total_bonos) > 0;
     document.getElementById('reciboContent').innerHTML = `
     <div style="text-align:center;margin-bottom:20px;border-bottom:2px solid #000;padding-bottom:12px;">
@@ -599,7 +610,8 @@ function openRecibo(idx) {
         <tr><td style="padding:6px 8px;border:1px solid #ccc;">ISR (LISR Art. 96)</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">—${fmt(i.isr_retener)}</td></tr>
         ${parseFloat(i.subsidio_empleo) > 0 ? `<tr style="color:var(--color-success);"><td style="padding:6px 8px;border:1px solid #ccc;">Subsidio al empleo</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">+${fmt(i.subsidio_empleo)}</td></tr>` : ''}
         <tr><td style="padding:6px 8px;border:1px solid #ccc;">IMSS (cuota obrera)</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">—${fmt(i.imss_obrero)}</td></tr>
-        ${i.faltas > 0 ? `<tr><td style="padding:6px 8px;border:1px solid #ccc;">Descuento faltas (${i.faltas})</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">—${fmt(descFaltas)}</td></tr>` : ''}
+        ${i.faltas > 0 ? `<tr><td style="padding:6px 8px;border:1px solid #ccc;">Faltas (${i.faltas} días no laborados)</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">—</td></tr>` : ''}
+        ${descRetardos > 0 ? `<tr><td style="padding:6px 8px;border:1px solid #ccc;">Descuento retardos (${i.retardos})</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">—${fmt(descRetardos)}</td></tr>` : ''}
         <tr style="background:#fbe9e7;"><td style="padding:6px 8px;border:1px solid #ccc;"><strong>Total deducciones</strong></td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;"><strong>—${fmt(i.deducciones_total)}</strong></td></tr>
         <tr style="background:#e3f2fd;"><td style="padding:10px 8px;border:1px solid #ccc;font-size:1.1em;"><strong>Sueldo neto</strong></td><td style="text-align:right;padding:10px 8px;border:1px solid #ccc;font-size:1.1em;"><strong>${fmt(i.sueldo_neto)}</strong></td></tr>
     </table>

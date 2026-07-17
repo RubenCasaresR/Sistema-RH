@@ -5,7 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#059669">
+    <link rel="icon" type="image/svg+xml" href="<?= APP_URL ?>/assets/favicon.svg">
     <meta name="csrf-token" content="<?= isset($_SESSION['csrf_token']) ? $_SESSION['csrf_token'] : generateCSRFToken() ?>">
+    <meta name="base-url" content="<?= APP_URL ?>">
     <title><?= APP_NAME ?> <?= isset($pageTitle) ? '— ' . $pageTitle : '' ?></title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">

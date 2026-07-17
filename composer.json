@@ -11,9 +11,7 @@
     "autoload": {
         "files": [
             "config/app.php",
-            "config/database.php",
-            "includes/session.php",
-            "includes/functions.php"
+            "config/database.php"
         ]
     },
     "scripts": {

@@ -289,7 +289,7 @@ $positions = $db->query("SELECT id, nombre FROM positions WHERE activo = 1 ORDER
                     <tr><td>departamento</td><td>No</td><td>Departamento</td></tr>
                     <tr><td>fecha_ingreso</td><td>No</td><td>Fecha de ingreso YYYY-MM-DD</td></tr>
                     <tr><td>salario_base</td><td>No</td><td>Salario base (número)</td></tr>
-                    <tr><td>tipo_contrato</td><td>No</td><td>Base, Confianza, Temporal, Honorarios, Outsourcing</td></tr>
+                    <tr><td>tipo_contrato</td><td>No</td><td>Base, Confianza, Temporal, Honorarios, Outsourcing, Becario</td></tr>
                     <tr><td>user_id</td><td>No</td><td>ID del usuario del sistema a vincular</td></tr>
                 </tbody>
             </table>

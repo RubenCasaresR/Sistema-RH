@@ -10,6 +10,7 @@ USE sistema_rh;
 CREATE TABLE IF NOT EXISTS payroll_periods (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     periodo VARCHAR(20) NOT NULL UNIQUE COMMENT 'Ej: 2026-06',
+    tipo_periodo ENUM('mensual', 'quincenal') NOT NULL DEFAULT 'mensual',
     fecha_inicio DATE NOT NULL,
     fecha_fin DATE NOT NULL,
     estatus ENUM('abierto','calculado','cerrado') NOT NULL DEFAULT 'abierto',

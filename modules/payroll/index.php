@@ -29,8 +29,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     if (count($errors) === 0) {
         try {
-            $stmt = $db->prepare("INSERT INTO payroll_periods (periodo, fecha_inicio, fecha_fin) VALUES (:p, :fi, :ff)");
-            $stmt->execute([':p' => $periodo, ':fi' => $fechaInicio, ':ff' => $fechaFin]);
+            $tipoPeriodo = $_POST['tipo_periodo'] ?? 'mensual';
+            if (!in_array($tipoPeriodo, ['mensual', 'quincenal'])) $tipoPeriodo = 'mensual';
+            $stmt = $db->prepare("INSERT INTO payroll_periods (periodo, tipo_periodo, fecha_inicio, fecha_fin) VALUES (:p, :tp, :fi, :ff)");
+            $stmt->execute([':p' => $periodo, ':tp' => $tipoPeriodo, ':fi' => $fechaInicio, ':ff' => $fechaFin]);
             setFlash('success', 'Período creado.');
             redirect(APP_URL . '/modules/payroll/index.php');
         } catch (PDOException $e) {
@@ -151,6 +153,12 @@ $estatusColors = ['abierto' => 'success', 'calculado' => 'info', 'cerrado' => 's
             <input type="hidden" name="action" value="create_period">
             <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
             <div class="form-group"><label for="periodo">Período (ej. 2026-06)</label><input type="text" id="periodo" name="periodo" required placeholder="2026-06" maxlength="20"></div>
+            <div class="form-group"><label for="tipo_periodo">Tipo de período</label>
+                <select id="tipo_periodo" name="tipo_periodo" required>
+                    <option value="mensual">Mensual</option>
+                    <option value="quincenal">Quincenal</option>
+                </select>
+            </div>
             <div class="form-row">
                 <div class="form-group"><label for="fecha_inicio">Fecha inicio</label><input type="date" id="fecha_inicio" name="fecha_inicio" required></div>
                 <div class="form-group"><label for="fecha_fin">Fecha fin</label><input type="date" id="fecha_fin" name="fecha_fin" required></div>
@@ -179,6 +187,7 @@ $estatusColors = ['abierto' => 'success', 'calculado' => 'info', 'cerrado' => 's
             <thead>
                 <tr>
                     <th>Período</th>
+                    <th>Tipo</th>
                     <th>Inicio</th>
                     <th>Fin</th>
                     <th>Empleados</th>
@@ -189,11 +198,12 @@ $estatusColors = ['abierto' => 'success', 'calculado' => 'info', 'cerrado' => 's
             </thead>
             <tbody>
                 <?php if (count($periods) === 0): ?>
-                    <tr><td colspan="7" class="empty-state"><?= $search !== '' ? 'Sin resultados para "' . h($search) . '".' : 'Sin períodos de nómina. Crea el primer período para comenzar.' ?></td></tr>
+                    <tr><td colspan="8" class="empty-state"><?= $search !== '' ? 'Sin resultados para "' . h($search) . '".' : 'Sin períodos de nómina. Crea el primer período para comenzar.' ?></td></tr>
                 <?php else: ?>
                     <?php foreach ($periods as $p): ?>
                         <tr>
                             <td><strong><?= h($p['periodo']) ?></strong></td>
+                            <td><span class="badge badge-<?= ($p['tipo_periodo'] ?? 'mensual') === 'quincenal' ? 'warning' : 'secondary' ?>"><?= ucfirst($p['tipo_periodo'] ?? 'Mensual') ?></span></td>
                             <td><?= formatDate($p['fecha_inicio']) ?></td>
                             <td><?= formatDate($p['fecha_fin']) ?></td>
                             <td><?= (int)$p['total_empleados'] ?></td>

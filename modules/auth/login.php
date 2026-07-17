@@ -27,6 +27,8 @@ $csrfToken = generateCSRFToken();
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/main.css?v=<?= APP_VERSION ?>">
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/login.css?v=<?= APP_VERSION ?>">
+    <link rel="icon" type="image/svg+xml" href="<?= APP_URL ?>/assets/favicon.svg">
+    <meta name="base-url" content="<?= APP_URL ?>">
 </head>
 <body class="login-page">
     <div class="login-container">
