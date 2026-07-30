@@ -58,6 +58,15 @@ function getAvailablePermissions(): array
         'users.read',
         'users.update',
         'users.delete',
+
+        'control.tablero',
+        'control.indicadores',
+        'control.calcular',
+        'control.incidencias.read',
+        'control.incidencias.create',
+        'control.incidencias.update',
+        'control.incidencias.delete',
+        'control.checklist',
     ];
 }
 
@@ -81,6 +90,9 @@ function getRolePermissions(): array
             'reports.dashboard', 'reports.export',
             'audit.read',
             'users.create', 'users.read', 'users.update', 'users.delete',
+            'control.tablero', 'control.indicadores', 'control.calcular',
+            'control.incidencias.read', 'control.incidencias.create', 'control.incidencias.update', 'control.incidencias.delete',
+            'control.checklist',
         ],
 
         // Gerente RH: casi todo excepto payroll.calculate
@@ -96,6 +108,9 @@ function getRolePermissions(): array
             'reports.dashboard', 'reports.export',
             'audit.read',
             'users.read',
+            'control.tablero', 'control.indicadores', 'control.calcular',
+            'control.incidencias.read', 'control.incidencias.create', 'control.incidencias.update',
+            'control.checklist',
         ],
 
         // Jefe de área: su equipo, asistencia, permisos
@@ -106,6 +121,7 @@ function getRolePermissions(): array
             'announcements.read',
             'performance.create', 'performance.read', 'performance.update',
             'reports.dashboard',
+            'control.tablero', 'control.indicadores', 'control.checklist',
         ],
 
         // Empleado: solo su información
@@ -125,6 +141,7 @@ function getRolePermissions(): array
             'announcements.read',
             'payroll.read',
             'reports.dashboard', 'reports.export',
+            'control.tablero', 'control.indicadores',
         ],
     ];
 }

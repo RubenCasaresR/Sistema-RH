@@ -1,0 +1,277 @@
+/* ============================================================
+   Control RH - Estilos del módulo
+   ============================================================ */
+
+/* === TABLERO ANUAL === */
+.tablero-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.82rem;
+}
+.tablero-table thead th {
+    text-align: center;
+    padding: 8px 4px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+.tablero-table thead th:first-child,
+.tablero-table thead th:nth-child(2) {
+    text-align: left;
+    padding-left: 12px;
+}
+.tablero-table thead th:first-child { width: 40px; }
+.tablero-table thead th:nth-child(2) { min-width: 240px; }
+.tablero-table thead th:nth-child(3) { width: 90px; }
+
+.tablero-table tbody tr:hover { background: var(--color-bg); }
+.tablero-table tbody td {
+    text-align: center;
+    padding: 6px 3px;
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.tablero-table tbody td:hover { background: rgba(5, 150, 105, 0.05); }
+.tablero-table tbody td:first-child,
+.tablero-table tbody td:nth-child(2) {
+    text-align: left;
+    padding-left: 12px;
+    cursor: default;
+}
+.tablero-table tbody td:first-child { color: var(--color-text-secondary); font-weight: 500; }
+.tablero-table tbody td:nth-child(3) { font-size: 0.75rem; color: var(--color-text-secondary); }
+
+.tablero-seccion td {
+    background: var(--color-bg) !important;
+    font-weight: 600 !important;
+    font-size: 0.82rem;
+    padding: 10px 12px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text) !important;
+    border-bottom: 2px solid var(--color-border) !important;
+}
+
+/* Status badges for tablero */
+.status-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    min-width: 22px;
+    text-align: center;
+}
+.status-completado { background: #d1fae5; color: #065f46; }
+.status-en_proceso { background: #fef3c7; color: #92400e; }
+.status-pendiente { background: #f3f4f6; color: #6b7280; }
+.status-no_realizado { background: #fee2e2; color: #991b1b; }
+.status-na { background: #e5e7eb; color: #9ca3af; }
+
+/* === INDICADORES === */
+.indicador-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+.indicador-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.indicador-card .ind-label {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+.indicador-card .ind-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--color-text);
+}
+.indicador-card .ind-category {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.cat-asistencia .ind-value { color: #dc2626; }
+.cat-personal .ind-value { color: #059669; }
+.cat-clima .ind-value { color: #d97706; }
+.cat-expedientes .ind-value { color: #7c3aed; }
+.cat-reclutamiento .ind-value { color: #2563eb; }
+
+/* === BITÁCORA DE INCIDENCIAS === */
+.incidencia-texto {
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.badge-tipo {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+.badge-tipo-queja { background: #fef3c7; color: #92400e; }
+.badge-tipo-conflicto_interpersonal { background: #fee2e2; color: #991b1b; }
+.badge-tipo-falta_disciplinaria { background: #fce7f3; color: #9d174d; }
+.badge-tipo-incumplimiento_politica { background: #e0e7ff; color: #3730a3; }
+.badge-tipo-otro { background: #f3f4f6; color: #374151; }
+
+.badge-resultado {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+.badge-resultado-resuelto { background: #d1fae5; color: #065f46; }
+.badge-resultado-en_seguimiento { background: #fef3c7; color: #92400e; }
+.badge-resultado-escalado_direccion { background: #fee2e2; color: #991b1b; }
+.badge-resultado-sin_resolucion { background: #f3f4f6; color: #6b7280; }
+
+/* === CHECKLIST === */
+.checklist-seccion {
+    margin-bottom: 24px;
+}
+.checklist-seccion-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--color-bg);
+    border-radius: var(--radius) var(--radius) 0 0;
+    border: 1px solid var(--color-border);
+    border-bottom: 2px solid var(--color-primary);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.checklist-seccion-header i { color: var(--color-primary); }
+
+.checklist-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.checklist-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    border-bottom: 1px solid var(--color-border);
+}
+.checklist-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+}
+.checklist-table tbody tr:hover { background: var(--color-bg); }
+
+.checklist-table .td-semana {
+    width: 70px;
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+}
+.checklist-table .td-tarea { min-width: 250px; }
+.checklist-table .td-estatus { width: 150px; }
+.checklist-table .td-fecha { width: 110px; }
+.checklist-table .td-notas { min-width: 180px; }
+
+.checklist-table select {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1.5px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    background: var(--color-surface);
+}
+.checklist-table input[type="date"] {
+    padding: 5px 8px;
+    border: 1.5px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    background: var(--color-surface);
+    width: 100%;
+}
+.checklist-table textarea {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1.5px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    background: var(--color-surface);
+    resize: vertical;
+    min-height: 28px;
+}
+
+/* === MODAL DE TABLERO === */
+.modal-estatus-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 16px 0;
+}
+.modal-estatus-btn {
+    padding: 10px;
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: var(--color-surface);
+}
+.modal-estatus-btn:hover { border-color: var(--color-primary); }
+.modal-estatus-btn.selected { border-color: var(--color-primary); background: rgba(5, 150, 105, 0.08); }
+
+/* === FILTER BAR === */
+.filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+.filter-bar select,
+.filter-bar input[type="text"],
+.filter-bar input[type="date"] {
+    padding: 8px 12px;
+    border: 1.5px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    background: var(--color-surface);
+}
+.filter-bar .btn { white-space: nowrap; }
+
+/* === PRINT === */
+@media print {
+    .sidebar, .page-header, .filter-bar, .pagination, .btn, .modal { display: none !important; }
+    .main-content { margin-left: 0 !important; padding: 0 !important; }
+    .tablero-table { font-size: 0.7rem; }
+    .checklist-table { font-size: 0.75rem; }
+}

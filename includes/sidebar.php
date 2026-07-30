@@ -82,6 +82,30 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                 </a></li>
             <?php endif; ?>
 
+            <?php if (can('control.tablero')): ?>
+                <li><a href="<?= APP_URL ?>/modules/control/tablero.php" class="<?= basename(dirname($_SERVER['PHP_SELF'])) === 'control' && basename($_SERVER['PHP_SELF']) === 'tablero.php' ? 'active' : '' ?>">
+                    <i class="fa-solid fa-th nav-icon"></i> <span class="nav-text">Tablero Anual</span>
+                </a></li>
+            <?php endif; ?>
+
+            <?php if (can('control.indicadores')): ?>
+                <li><a href="<?= APP_URL ?>/modules/control/indicadores.php" class="<?= basename($_SERVER['PHP_SELF']) === 'indicadores.php' ? 'active' : '' ?>">
+                    <i class="fa-solid fa-chart-line nav-icon"></i> <span class="nav-text">Indicadores</span>
+                </a></li>
+            <?php endif; ?>
+
+            <?php if (can('control.incidencias.read')): ?>
+                <li><a href="<?= APP_URL ?>/modules/control/incidencias.php" class="<?= basename(dirname($_SERVER['PHP_SELF'])) === 'control' && in_array(basename($_SERVER['PHP_SELF']), ['incidencias.php','incidencia_form.php','incidencia_view.php']) ? 'active' : '' ?>">
+                    <i class="fa-solid fa-exclamation-triangle nav-icon"></i> <span class="nav-text">Incidencias</span>
+                </a></li>
+            <?php endif; ?>
+
+            <?php if (can('control.checklist')): ?>
+                <li><a href="<?= APP_URL ?>/modules/control/checklist.php" class="<?= basename($_SERVER['PHP_SELF']) === 'checklist.php' ? 'active' : '' ?>">
+                    <i class="fa-solid fa-list-check nav-icon"></i> <span class="nav-text">Checklist</span>
+                </a></li>
+            <?php endif; ?>
+
             <?php if (can('users.read')): ?>
                 <li><a href="<?= APP_URL ?>/modules/users/index.php" class="<?= basename(dirname($_SERVER['PHP_SELF'])) === 'users' ? 'active' : '' ?>">
                     <i class="fa-solid fa-user-shield nav-icon"></i> <span class="nav-text">Usuarios</span>

@@ -202,6 +202,18 @@ $fechaLarga = $diasSemana[(int)date('w')] . ', ' . (int)date('d') . ' de ' . $me
                 <span class="quick-label">Vacantes</span>
             </a>
         <?php endif; ?>
+        <?php if (can('control.tablero')): ?>
+            <a href="<?= APP_URL ?>/modules/control/tablero.php" class="quick-item">
+                <span class="quick-icon" style="background:#dbeafe;color:#2563eb;"><i class="fa-solid fa-th"></i></span>
+                <span class="quick-label">Tablero RH</span>
+            </a>
+        <?php endif; ?>
+        <?php if (can('control.checklist')): ?>
+            <a href="<?= APP_URL ?>/modules/control/checklist.php" class="quick-item">
+                <span class="quick-icon" style="background:#fef3c7;color:#d97706;"><i class="fa-solid fa-list-check"></i></span>
+                <span class="quick-label">Checklist</span>
+            </a>
+        <?php endif; ?>
         <?php if (can('documents.upload')): ?>
             <a href="<?= APP_URL ?>/modules/documents/index.php" class="quick-item">
                 <span class="quick-icon" style="background:#fce7f3;color:#db2777;"><i class="fa-solid fa-file-lines"></i></span>
