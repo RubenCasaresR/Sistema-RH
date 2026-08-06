@@ -34,7 +34,21 @@ async function apiFetch(url, options = {}) {
     const merged = Object.assign({}, defaultOptions, options);
     try {
         const response = await fetch(url, merged);
-        return await response.json();
+        const text = await response.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            data = { success: false, message: 'Respuesta inválida del servidor.' };
+        }
+        if (!response.ok) {
+            data.success = false;
+            data.status = response.status;
+            if (response.status === 401) {
+                window.location.href = data.redirect || APP_URL + '/modules/auth/login.php';
+            }
+        }
+        return data;
     } catch (err) {
         console.error('API Error:', err);
         return { success: false, message: 'Error de conexión.' };
@@ -46,6 +60,57 @@ async function apiFetchAction(module, action, data = {}) {
         method: 'POST',
         body: JSON.stringify(data),
     });
+}
+
+async function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]')?.content;
+    if (meta) return meta;
+    try {
+        const r = await fetch(APP_URL + '/api/csrf.php');
+        const d = await r.json();
+        return d.token || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+async function downloadFile(url, opts = {}) {
+    const token = await getCsrfToken();
+    try {
+        const response = await fetch(url, { headers: { 'X-CSRF-Token': token } });
+        if (!response.ok) {
+            let data = null;
+            try { data = await response.json(); } catch (e) { /* ignore */ }
+            if (response.status === 401) {
+                window.location.href = (data && data.redirect) || APP_URL + '/modules/auth/login.php';
+                return false;
+            }
+            alert(data && data.message ? data.message : 'No se pudo obtener el archivo.');
+            return false;
+        }
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^";]+)"?/i);
+        const filename = match ? match[1] : 'archivo';
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        if (opts.preview) {
+            window.open(objectUrl, '_blank');
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+        } else {
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+        }
+        return true;
+    } catch (err) {
+        console.error('Download Error:', err);
+        alert('Error de conexión.');
+        return false;
+    }
 }
 
 function openModal(id) {
@@ -84,13 +149,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function downloadDoc(id) {
     if (typeof id === 'object') id = id.dataset.id;
-    const token = document.querySelector('meta[name="csrf-token"]')?.content;
-    if (!token) {
-        fetch(APP_URL + '/api/csrf.php')
-            .then(r => r.json())
-            .then(d => { window.location.href = APP_URL + '/api/files.php?id=' + id + '&token=' + d.token; });
-        return false;
-    }
-    window.location.href = APP_URL + '/api/files.php?id=' + id + '&token=' + token;
+    downloadFile(APP_URL + '/api/files.php?id=' + id);
     return false;
 }

@@ -174,7 +174,7 @@ $totalPaginas = max(1, (int)ceil($totalCand / $porPagina));
                             <td><?= h($c['email']) ?></td>
                             <td>
                                 <?php if ($c['cv_ruta']): ?>
-                                    <a href="<?= APP_URL ?>/api/cv.php?candidate_id=<?= (int)$c['id'] ?>&token=<?= urlencode($csrfToken) ?>" target="_blank">Ver CV</a>
+                                    <a href="#" onclick="downloadFile('<?= APP_URL ?>/api/cv.php?candidate_id=<?= (int)$c['id'] ?>', { preview: true });return false;">Ver CV</a>
                                 <?php else: ?>
                                     —
                                 <?php endif; ?>

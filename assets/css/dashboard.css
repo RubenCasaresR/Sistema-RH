@@ -298,3 +298,11 @@
 :root.dark-mode .birthday-avatar {
     background: var(--color-primary);
 }
+
+.anniversary-avatar {
+    background: #f59e0b;
+}
+
+:root.dark-mode .anniversary-avatar {
+    background: #b45309;
+}

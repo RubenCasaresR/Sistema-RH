@@ -91,6 +91,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateRFC($data['rfc'])) $errors[] = 'RFC inválido.';
     if (!validateNSS($data['nss'])) $errors[] = 'NSS inválido (11 dígitos).';
 
+    $generosValidos = ['M', 'F', 'Otro'];
+    if (!in_array($data['genero'], $generosValidos, true)) {
+        $errors[] = 'Género no válido.';
+        $data['genero'] = null;
+    }
+
     if ($data['email'] !== '' && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'El correo electrónico no es válido.';
     }
@@ -309,7 +315,7 @@ $emp = $old ?: $employee;
                     <div class="photo-upload">
                         <div class="photo-preview" id="photoPreview" style="width:100px;height:100px;border-radius:50%;border:2px solid var(--color-border);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--color-surface-alt);">
                             <?php if ($emp['foto_url']): ?>
-                                <img src="<?= APP_URL ?>/<?= $emp['foto_url'] ?>" style="width:100%;height:100%;object-fit:cover;">
+                                <img src="<?= APP_URL ?>/api/photo.php?employee_id=<?= (int)$emp['id'] ?>" style="width:100%;height:100%;object-fit:cover;">
                             <?php else: ?>
                                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                             <?php endif; ?>

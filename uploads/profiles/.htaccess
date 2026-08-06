@@ -1,0 +1,15 @@
+# Bloquear acceso directo a fotos de perfil (PII).
+# Deshabilitar ejecución de scripts PHP (defensa en profundidad).
+# Las fotos se sirven únicamente vía api/photo.php (con sesión, permisos y alcance).
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+
+<FilesMatch "\.(php|php3|php4|php5|php7|phtml|phar|pl|py|cgi|asp|aspx|jsp|sh)(\.|$)">
+    Require all denied
+</FilesMatch>
+
+Require all denied

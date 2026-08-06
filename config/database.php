@@ -30,8 +30,9 @@ function getDB(): PDO
         } catch (PDOException $e) {
             error_log('Error de conexión BD: ' . $e->getMessage());
             if (APP_ENV === 'development') {
-                die('Error de conexión: ' . $e->getMessage());
+                error_log('DSN: ' . $dsn);
             }
+            http_response_code(500);
             die('Error interno del sistema. Contacte al administrador.');
         }
     }

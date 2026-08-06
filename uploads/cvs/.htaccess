@@ -1,0 +1,3 @@
+# Bloquear acceso directo a CVs de candidatos.
+# Los archivos se sirven únicamente vía api/cv.php (con sesión y permisos).
+Require all denied

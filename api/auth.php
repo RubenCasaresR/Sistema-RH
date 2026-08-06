@@ -30,6 +30,8 @@ if (!$input) {
     exit;
 }
 
+const PASSWORD_DUMMY_HASH = '$2y$12$/4JHRdU.wOX376t0irFv2enDbrm7cOId8l3LC5E.P/2b/g.6vz6RK';
+
 switch ($action) {
     case 'login':
         handleLogin($input);
@@ -90,6 +92,14 @@ function handleLogin(array $input): void
         $user = $stmt->fetch();
 
         if (!$user) {
+            password_verify($password, PASSWORD_DUMMY_HASH);
+            recordLoginAttempt($username);
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Credenciales inválidas.']);
+            return;
+        }
+
+        if (!password_verify($password, $user['password_hash'])) {
             recordLoginAttempt($username);
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Credenciales inválidas.']);
@@ -97,13 +107,6 @@ function handleLogin(array $input): void
         }
 
         if (!$user['activo']) {
-            recordLoginAttempt($username);
-            http_response_code(403);
-            echo json_encode(['success' => false, 'message' => 'Cuenta desactivada. Contacte al administrador.']);
-            return;
-        }
-
-        if (!password_verify($password, $user['password_hash'])) {
             recordLoginAttempt($username);
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Credenciales inválidas.']);
@@ -130,8 +133,8 @@ function handleLogin(array $input): void
         $_SESSION['last_activity'] = time();
 
         if ($rememberMe) {
-            $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || $_SERVER['SERVER_PORT'] == 443;
-            setcookie(session_name(), session_id(), time() + REMEMBER_ME_LIFETIME, '/', '', $secure, true);
+            $secure = defined('SESSION_COOKIE_SECURE') ? SESSION_COOKIE_SECURE : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['SERVER_PORT'] ?? 0) == 443);
+            setcookie(session_name(), session_id(), time() + REMEMBER_ME_LIFETIME, '/', '', $secure, true, 'Lax');
         }
 
         logAudit('login', 'user', (int)$user['id']);
@@ -154,6 +157,13 @@ function handleLogin(array $input): void
 
 function handleForgotPassword(array $input): void
 {
+    $csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!verifyCSRFToken($csrfToken)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Token de seguridad inválido.']);
+        return;
+    }
+
     $email = trim($input['email'] ?? '');
 
     if ($email === '') {
@@ -171,6 +181,15 @@ function handleForgotPassword(array $input): void
     try {
         $db = getDB();
 
+        $window = date('Y-m-d H:i:s', strtotime('-15 minutes'));
+        $stmtCount = $db->prepare("SELECT COUNT(*) FROM password_resets WHERE email = :email AND created_at >= :window");
+        $stmtCount->execute([':email' => $email, ':window' => $window]);
+        if ((int)$stmtCount->fetchColumn() >= 3) {
+            http_response_code(429);
+            echo json_encode(['success' => false, 'message' => 'Demasiadas solicitudes. Intenta de nuevo en 15 minutos.']);
+            return;
+        }
+
         $stmt = $db->prepare('SELECT id, username FROM users WHERE email = :email AND activo = 1 LIMIT 1');
         $stmt->execute([':email' => $email]);
         $user = $stmt->fetch();
@@ -184,12 +203,13 @@ function handleForgotPassword(array $input): void
         $stmt->execute([':email' => $email]);
 
         $token = bin2hex(random_bytes(32));
+        $tokenHash = hash('sha256', $token);
         $expiresAt = date('Y-m-d H:i:s', strtotime('+1 hour'));
 
         $stmtIns = $db->prepare('INSERT INTO password_resets (email, token, expires_at) VALUES (:email, :token, :expires_at)');
         $stmtIns->execute([
             ':email'      => $email,
-            ':token'      => $token,
+            ':token'      => $tokenHash,
             ':expires_at' => $expiresAt,
         ]);
 
@@ -227,6 +247,13 @@ function handleForgotPassword(array $input): void
 
 function handleResetPassword(array $input): void
 {
+    $csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!verifyCSRFToken($csrfToken)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Token de seguridad inválido.']);
+        return;
+    }
+
     $token = trim($input['token'] ?? '');
     $email = trim($input['email'] ?? '');
     $password = $input['password'] ?? '';
@@ -238,39 +265,35 @@ function handleResetPassword(array $input): void
         return;
     }
 
+    if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'El enlace es inválido o ha expirado. Solicita un nuevo restablecimiento.']);
+        return;
+    }
+
     if ($password !== $confirmPassword) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Las contraseñas no coinciden.']);
         return;
     }
 
-    if (strlen($password) < 8) {
+    $policyError = validatePasswordPolicy($password);
+    if ($policyError !== null) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'La contraseña debe tener al menos 8 caracteres.']);
-        return;
-    }
-
-    if (!preg_match('/[A-Z]/', $password)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'La contraseña debe contener al menos una mayúscula.']);
-        return;
-    }
-
-    if (!preg_match('/[0-9]/', $password)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'La contraseña debe contener al menos un número.']);
+        echo json_encode(['success' => false, 'message' => $policyError]);
         return;
     }
 
     try {
         $db = getDB();
+        $tokenHash = hash('sha256', $token);
 
         $stmt = $db->prepare("
             SELECT id, email FROM password_resets
             WHERE token = :token AND email = :email AND used = 0 AND expires_at > NOW()
             LIMIT 1
         ");
-        $stmt->execute([':token' => $token, ':email' => $email]);
+        $stmt->execute([':token' => $tokenHash, ':email' => $email]);
         $reset = $stmt->fetch();
 
         if (!$reset) {
@@ -314,11 +337,7 @@ function handleResetPassword(array $input): void
 
 function handleChangePassword(array $input): void
 {
-    if (!isLoggedIn()) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'message' => 'No autenticado.']);
-        return;
-    }
+    requireAuth();
 
     $csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     if (!verifyCSRFToken($csrfToken)) {
@@ -343,21 +362,10 @@ function handleChangePassword(array $input): void
         return;
     }
 
-    if (strlen($newPassword) < 8) {
+    $policyError = validatePasswordPolicy($newPassword);
+    if ($policyError !== null) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'La contraseña debe tener al menos 8 caracteres.']);
-        return;
-    }
-
-    if (!preg_match('/[A-Z]/', $newPassword)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'La contraseña debe contener al menos una mayúscula.']);
-        return;
-    }
-
-    if (!preg_match('/[0-9]/', $newPassword)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'La contraseña debe contener al menos un número.']);
+        echo json_encode(['success' => false, 'message' => $policyError]);
         return;
     }
 

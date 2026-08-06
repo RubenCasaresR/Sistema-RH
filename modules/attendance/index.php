@@ -27,8 +27,20 @@ if ($employeeId > 0) {
     $params[":emp_id"] = $employeeId;
 }
 
+$scope = resolveEmployeeScope($db);
+$whereScope = "";
+if ($scope['type'] === 'own') {
+    $whereScope = "AND e.id = :scope_eid";
+    $params[':scope_eid'] = $scope['id'];
+} elseif ($scope['type'] === 'dept') {
+    $whereScope = "AND e.departamento = :scope_depto";
+    $params[':scope_depto'] = $scope['id'];
+} elseif ($scope['type'] === 'none') {
+    $whereScope = "AND 1=0";
+}
+
 // ── List view with pagination ──────────────────────────────
-$stmtCount = $db->prepare("SELECT COUNT(*) FROM attendance_logs a WHERE a.fecha BETWEEN :inicio AND :fin AND a.tipo = 'regular' $whereEmployee");
+$stmtCount = $db->prepare("SELECT COUNT(*) FROM attendance_logs a INNER JOIN employees e ON e.id = a.employee_id WHERE a.fecha BETWEEN :inicio AND :fin AND a.tipo = 'regular' $whereEmployee $whereScope");
 $stmtCount->execute($params);
 $totalRegistros = (int)$stmtCount->fetchColumn();
 $totalPages = max(1, (int)ceil($totalRegistros / $perPage));
@@ -39,7 +51,7 @@ $stmt = $db->prepare("
     SELECT a.*, e.nombre, e.apellido_paterno, e.apellido_materno, e.puesto, e.departamento
     FROM attendance_logs a
     INNER JOIN employees e ON e.id = a.employee_id
-    WHERE a.fecha BETWEEN :inicio AND :fin AND a.tipo = 'regular' $whereEmployee
+    WHERE a.fecha BETWEEN :inicio AND :fin AND a.tipo = 'regular' $whereEmployee $whereScope
     ORDER BY a.fecha DESC, e.apellido_paterno
     LIMIT :lim OFFSET :off
 ");
@@ -57,13 +69,23 @@ $stmtResumen = $db->prepare("
         SUM(CASE WHEN a.hora_salida IS NULL THEN 1 ELSE 0 END) AS sin_salida
     FROM attendance_logs a
     INNER JOIN employees e ON e.id = a.employee_id
-    WHERE a.fecha BETWEEN :inicio AND :fin AND a.tipo = 'regular' AND e.activo = 1 $whereEmployee
+    WHERE a.fecha BETWEEN :inicio AND :fin AND a.tipo = 'regular' AND e.activo = 1 $whereEmployee $whereScope
 ");
 $stmtResumen->execute($params);
 $resumen = $stmtResumen->fetch();
 
 // Lista de empleados para filtros
-$emps = $db->query("SELECT id, nombre, apellido_paterno, apellido_materno FROM employees WHERE activo = 1 ORDER BY apellido_paterno")->fetchAll();
+if ($scope['type'] === 'own') {
+    $stmtEmps = $db->prepare("SELECT id, nombre, apellido_paterno, apellido_materno FROM employees WHERE activo = 1 AND id = :eid ORDER BY apellido_paterno");
+    $stmtEmps->execute([':eid' => $scope['id']]);
+    $emps = $stmtEmps->fetchAll();
+} elseif ($scope['type'] === 'dept') {
+    $stmtEmps = $db->prepare("SELECT id, nombre, apellido_paterno, apellido_materno FROM employees WHERE activo = 1 AND departamento = :depto ORDER BY apellido_paterno");
+    $stmtEmps->execute([':depto' => $scope['id']]);
+    $emps = $stmtEmps->fetchAll();
+} else {
+    $emps = $db->query("SELECT id, nombre, apellido_paterno, apellido_materno FROM employees WHERE activo = 1 ORDER BY apellido_paterno")->fetchAll();
+}
 
 $lateThreshold = defined("LATE_THRESHOLD") ? LATE_THRESHOLD : "09:05";
 $jornadaHoras = defined("JORNADA_HORAS") ? JORNADA_HORAS : 8;
@@ -297,6 +319,13 @@ let calendarioMes = <?= (int)date("m") ?>;
 let calendarioAnio = <?= (int)date("Y") ?>;
 let calendarioEmpId = <?= $employeeId > 0 ? $employeeId : "null" ?>;
 
+function esc(v) {
+    return String(v ?? "").replace(/[&<>"']/g, function(c) {
+        return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+}
+
+
 function abrirCorreccion(btn) {
     document.getElementById("corrId").value = btn.dataset.id;
     document.getElementById("corrFecha").value = btn.dataset.fecha;
@@ -410,9 +439,9 @@ async function cargarCalendario() {
 
             if (info) {
                 clase = info.class;
-                infoHtml = `<span class="day-info">${info.hora_entrada || "?"} - ${info.hora_salida || "?"}</span>`;
+                infoHtml = `<span class="day-info">${esc(info.hora_entrada) || "?"} - ${esc(info.hora_salida) || "?"}</span>`;
                 if (info.estado !== "Regular") {
-                    infoHtml += `<span class="day-status badge badge-${clase === "absent" ? "danger" : "info"}">${info.estado}</span>`;
+                    infoHtml += `<span class="day-status badge badge-${clase === "absent" ? "danger" : "info"}">${esc(info.estado)}</span>`;
                 }
             }
 
@@ -444,8 +473,8 @@ async function cargarHistorialCorrecciones(logId) {
             let html = "";
             for (const c of data.data) {
                 html += `<div style="font-size:0.8rem;padding:4px 0;border-bottom:1px solid var(--color-border-alt);">
-                    <strong>${c.campo_modificado}</strong>: ${c.valor_anterior || "—"} → ${c.valor_nuevo || "—"}
-                    <br><span style="color:var(--color-text-secondary);">${c.motivo} — ${c.fecha}</span>
+                    <strong>${esc(c.campo_modificado)}</strong>: ${esc(c.valor_anterior) || "—"} → ${esc(c.valor_nuevo) || "—"}
+                    <br><span style="color:var(--color-text-secondary);">${esc(c.motivo)} — ${esc(c.fecha)}</span>
                 </div>`;
             }
             list.innerHTML = html;
@@ -498,15 +527,15 @@ async function cargarResumen() {
 
         for (const r of data.data) {
             html += `<tr>
-                <td class="employee-name">${r.nombre_completo}</td>
-                <td>${r.dias_habiles}</td>
-                <td>${r.asistencias}</td>
-                <td><span style="color:var(--color-danger)">${r.faltas}</span></td>
-                <td><span style="color:var(--color-warning)">${r.retardos}</span></td>
-                <td>${r.sin_salida}</td>
-                <td>${r.horas_reales}h</td>
-                <td>${r.horas_esperadas}h</td>
-                <td>${r.horas_extra > 0 ? '<span style="color:var(--color-primary)">' + r.horas_extra + 'h</span>' : "—"}</td>
+                <td class="employee-name">${esc(r.nombre_completo)}</td>
+                <td>${esc(r.dias_habiles)}</td>
+                <td>${esc(r.asistencias)}</td>
+                <td><span style="color:var(--color-danger)">${esc(r.faltas)}</span></td>
+                <td><span style="color:var(--color-warning)">${esc(r.retardos)}</span></td>
+                <td>${esc(r.sin_salida)}</td>
+                <td>${esc(r.horas_reales)}h</td>
+                <td>${esc(r.horas_esperadas)}h</td>
+                <td>${r.horas_extra > 0 ? '<span style="color:var(--color-primary)">' + esc(r.horas_extra) + 'h</span>' : "—"}</td>
             </tr>`;
         }
 

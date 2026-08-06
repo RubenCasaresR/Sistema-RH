@@ -18,10 +18,28 @@ Options -Indexes
     RewriteEngine On
     RewriteBase /
 
+    # Redirigir HTTP a HTTPS (excepto en localhost/XAMPP)
+    RewriteCond %{HTTPS} off
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:[0-9]+)?$ [NC]
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
     # Denegar acceso directo a directorios sensibles
     RewriteRule ^config/.*$ - [F,L]
     RewriteRule ^includes/.*$ - [F,L]
     RewriteRule ^sql/.*$ - [F,L]
+    RewriteRule ^tests/.*$ - [F,L]
+    RewriteRule ^vendor/.*$ - [F,L]
+    RewriteRule ^\.opencode/.*$ - [F,L]
+
+    # Denegar acceso a archivos sensibles
+    RewriteRule ^\.env$ - [F,L]
+    RewriteRule ^\.env\.example$ - [F,L]
+    RewriteRule ^composer\.(json|lock)$ - [F,L]
+    RewriteRule ^phpunit\.xml$ - [F,L]
+    RewriteRule ^\.phpunit\.cache(/|$) - [F,L]
+    RewriteRule ^_test.*\.php$ - [F,L]
+    RewriteRule ^\.git(/|$) - [F,L]
+    RewriteRule ^\.gitignore$ - [F,L]
 
     # Si el archivo o directorio existe, servirlo directamente
     RewriteCond %{REQUEST_FILENAME} !-f

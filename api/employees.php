@@ -43,25 +43,34 @@ function handleList(PDO $db): void
 {
     requirePermission('employees.read');
 
+    $scope = resolveEmployeeScope($db);
+    $scopeWhere = '';
+    $scopeParams = [];
+    if ($scope['type'] === 'own') {
+        $scopeWhere = ' AND id = :scope_eid';
+        $scopeParams[':scope_eid'] = $scope['id'];
+    } elseif ($scope['type'] === 'dept') {
+        $scopeWhere = ' AND departamento = :scope_depto';
+        $scopeParams[':scope_depto'] = $scope['id'];
+    } elseif ($scope['type'] === 'none') {
+        $scopeWhere = ' AND 0';
+    }
+
     $search = trim($_GET['search'] ?? '');
-    if ($search !== '') {
-        $stmt = $db->prepare('
+    $baseSql = '
             SELECT id, nombre, apellido_paterno, apellido_materno, curp, rfc, puesto,
                    departamento, fecha_ingreso, activo
             FROM employees
-            WHERE activo = 1
-              AND (nombre LIKE :q OR apellido_paterno LIKE :q OR curp LIKE :q)
-            ORDER BY apellido_paterno, nombre
-        ');
-        $like = '%' . $search . '%';
-        $stmt->execute([':q' => $like]);
+            WHERE activo = 1 ';
+
+    if ($search !== '') {
+        $sql = $baseSql . ' AND (nombre LIKE :q OR apellido_paterno LIKE :q OR curp LIKE :q)' . $scopeWhere . ' ORDER BY apellido_paterno, nombre';
+        $stmt = $db->prepare($sql);
+        $stmt->execute(array_merge([':q' => '%' . $search . '%'], $scopeParams));
     } else {
-        $stmt = $db->query('
-            SELECT id, nombre, apellido_paterno, apellido_materno, curp, rfc, puesto,
-                   departamento, fecha_ingreso, activo
-            FROM employees WHERE activo = 1
-            ORDER BY apellido_paterno, nombre
-        ');
+        $sql = $baseSql . $scopeWhere . ' ORDER BY apellido_paterno, nombre';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($scopeParams);
     }
 
     echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
@@ -78,16 +87,29 @@ function handleGet(PDO $db): void
         return;
     }
 
+    $scope = resolveEmployeeScope($db);
+    $scopeWhere = '';
+    $params = [':id' => $id];
+    if ($scope['type'] === 'own') {
+        $scopeWhere = ' AND id = :scope_eid';
+        $params[':scope_eid'] = $scope['id'];
+    } elseif ($scope['type'] === 'dept') {
+        $scopeWhere = ' AND departamento = :scope_depto';
+        $params[':scope_depto'] = $scope['id'];
+    } elseif ($scope['type'] === 'none') {
+        $scopeWhere = ' AND 0';
+    }
+
     $stmt = $db->prepare('
-        SELECT id, user_id, nombre, apellido_paterno, apellido_materno,
+        SELECT id, nombre, apellido_paterno, apellido_materno,
                curp, rfc, fecha_nacimiento, genero,
                email, telefono, calle, numero_exterior, numero_interior,
                colonia, codigo_postal, ciudad, estado, pais,
                puesto, departamento, fecha_ingreso, tipo_contrato,
                foto_url, notas, activo, created_at, updated_at
-        FROM employees WHERE id = :id LIMIT 1
+        FROM employees WHERE id = :id ' . $scopeWhere . ' LIMIT 1
     ');
-    $stmt->execute([':id' => $id]);
+    $stmt->execute($params);
     $emp = $stmt->fetch();
 
     if (!$emp) {
@@ -110,6 +132,17 @@ function handleExport(PDO $db): void
 
     $where = 'WHERE 1=1';
     $params = [];
+
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'own') {
+        $where .= ' AND id = :scope_eid';
+        $params[':scope_eid'] = $scope['id'];
+    } elseif ($scope['type'] === 'dept') {
+        $where .= ' AND departamento = :scope_depto';
+        $params[':scope_depto'] = $scope['id'];
+    } elseif ($scope['type'] === 'none') {
+        $where .= ' AND 0';
+    }
 
     if ($filtroEstatus === 'activos') {
         $where .= ' AND activo = 1';
@@ -151,6 +184,14 @@ function handleExport(PDO $db): void
     $output = fopen('php://output', 'w');
     fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
 
+    $csvCell = function (mixed $value): string {
+        $value = trim((string)$value);
+        if ($value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"])) {
+            return "'" . $value;
+        }
+        return $value;
+    };
+
     fputcsv($output, [
         'ID','Nombre','Apellido Paterno','Apellido Materno','CURP','RFC','NSS',
         'Fecha Nacimiento','Género','Email','Teléfono',
@@ -160,30 +201,30 @@ function handleExport(PDO $db): void
 
     foreach ($employees as $e) {
         fputcsv($output, [
-            $e['id'],
-            $e['nombre'],
-            $e['apellido_paterno'],
-            $e['apellido_materno'],
-            $e['curp'],
-            $e['rfc'],
-            $e['nss'],
-            $e['fecha_nacimiento'],
-            $e['genero'],
-            $e['email'],
-            $e['telefono'],
-            $e['calle'],
-            $e['numero_exterior'],
-            $e['numero_interior'],
-            $e['colonia'],
-            $e['codigo_postal'],
-            $e['ciudad'],
-            $e['estado'],
-            $e['puesto'],
-            $e['departamento'],
-            $e['fecha_ingreso'],
-            $e['salario_base'],
-            $e['tipo_contrato'],
-            $e['activo'] ? 'Si' : 'No',
+            $csvCell($e['id']),
+            $csvCell($e['nombre']),
+            $csvCell($e['apellido_paterno']),
+            $csvCell($e['apellido_materno']),
+            $csvCell($e['curp']),
+            $csvCell($e['rfc']),
+            $csvCell($e['nss']),
+            $csvCell($e['fecha_nacimiento']),
+            $csvCell($e['genero']),
+            $csvCell($e['email']),
+            $csvCell($e['telefono']),
+            $csvCell($e['calle']),
+            $csvCell($e['numero_exterior']),
+            $csvCell($e['numero_interior']),
+            $csvCell($e['colonia']),
+            $csvCell($e['codigo_postal']),
+            $csvCell($e['ciudad']),
+            $csvCell($e['estado']),
+            $csvCell($e['puesto']),
+            $csvCell($e['departamento']),
+            $csvCell($e['fecha_ingreso']),
+            $csvCell($e['salario_base']),
+            $csvCell($e['tipo_contrato']),
+            $csvCell($e['activo'] ? 'Si' : 'No'),
         ]);
     }
 

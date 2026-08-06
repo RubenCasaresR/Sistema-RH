@@ -140,7 +140,7 @@ $puedeExportar = can('employees.export');
                         <tr class="<?= !$emp['activo'] ? 'row-inactive' : '' ?>">
                             <td>
                                 <?php if ($emp['foto_url']): ?>
-                                    <img src="<?= APP_URL ?>/<?= $emp['foto_url'] ?>" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">
+                                    <img src="<?= APP_URL ?>/api/photo.php?employee_id=<?= (int)$emp['id'] ?>" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">
                                 <?php else: ?>
                                     <span style="display:inline-block;width:32px;height:32px;border-radius:50%;background:var(--color-surface-alt);display:flex;align-items:center;justify-content:center;font-size:0.8rem;color:#999;"><?= h(strtoupper(substr($emp['nombre'], 0, 1))) ?></span>
                                 <?php endif; ?>
@@ -166,9 +166,17 @@ $puedeExportar = can('employees.export');
                                 <?php endif; ?>
                                 <?php if (can('employees.delete')): ?>
                                     <?php if ($emp['activo']): ?>
-                                        <a href="<?= APP_URL ?>/modules/employees/delete.php?id=<?= (int)$emp['id'] ?>&token=<?= urlencode($toggleToken) ?>" class="btn btn-sm btn-ghost" onclick="return confirm('¿Desactivar a <?= h($emp['nombre'] . ' ' . $emp['apellido_paterno']) ?>?')">Desactivar</a>
+                                        <form method="POST" action="<?= APP_URL ?>/modules/employees/delete.php" style="display:inline;" onsubmit="return confirm('¿Desactivar este empleado?')">
+                                            <input type="hidden" name="csrf_token" value="<?= h($toggleToken) ?>">
+                                            <input type="hidden" name="id" value="<?= (int)$emp['id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-ghost">Desactivar</button>
+                                        </form>
                                     <?php else: ?>
-                                        <a href="<?= APP_URL ?>/modules/employees/reactivate.php?id=<?= (int)$emp['id'] ?>&token=<?= urlencode($toggleToken) ?>" class="btn btn-sm btn-ghost" onclick="return confirm('¿Reactivar a <?= h($emp['nombre'] . ' ' . $emp['apellido_paterno']) ?>?')">Reactivar</a>
+                                        <form method="POST" action="<?= APP_URL ?>/modules/employees/reactivate.php" style="display:inline;" onsubmit="return confirm('¿Reactivar este empleado?')">
+                                            <input type="hidden" name="csrf_token" value="<?= h($toggleToken) ?>">
+                                            <input type="hidden" name="id" value="<?= (int)$emp['id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-ghost">Reactivar</button>
+                                        </form>
                                     <?php endif; ?>
                                 <?php endif; ?>
                             </td>

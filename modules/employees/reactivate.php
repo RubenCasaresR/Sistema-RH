@@ -4,7 +4,12 @@ require_once __DIR__ . '/../../includes/session.php';
 requireAuth();
 requirePermission('employees.delete');
 
-$id = (int)($_GET['id'] ?? 0);
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    setFlash('danger', 'Método no permitido.');
+    redirect(APP_URL . '/modules/employees/index.php');
+}
+
+$id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
     setFlash('danger', 'Empleado no válido.');
     redirect(APP_URL . '/modules/employees/index.php');
@@ -12,7 +17,7 @@ if ($id <= 0) {
 
 $db = getDB();
 
-$token = $_GET['token'] ?? '';
+$token = $_POST['csrf_token'] ?? '';
 if (!verifyCSRFToken($token)) {
     setFlash('danger', 'Token de seguridad inválido.');
     redirect(APP_URL . '/modules/employees/index.php');

@@ -98,7 +98,7 @@ $csrfToken = $puedeEliminar ? generateCSRFToken() : '';
             <div class="card announcement-card">
                 <div class="announcement-header">
                     <span class="badge badge-<?= $badgeMap[$a['tipo']] ?? 'info' ?>">
-                        <?= $tipoLabels[$a['tipo']] ?? $a['tipo'] ?>
+                        <?= h($tipoLabels[$a['tipo']] ?? $a['tipo']) ?>
                     </span>
                     <span class="announcement-date"><?= formatDate($a['created_at']) ?></span>
                     <?php if ($puedeEliminar): ?>

@@ -27,6 +27,17 @@ $cumples = $db->query("
     ORDER BY DAY(fecha_nacimiento)
 ")->fetchAll();
 
+// Aniversarios de antigüedad en los próximos 30 días
+$aniversarios = $db->query("
+    SELECT nombre, apellido_paterno, fecha_ingreso,
+           TIMESTAMPDIFF(YEAR, fecha_ingreso, CURDATE()) AS anios_cumplidos,
+           STR_TO_DATE(CONCAT(YEAR(CURDATE()), '-', MONTH(fecha_ingreso), '-', DAY(fecha_ingreso)), '%Y-%m-%d') AS aniversario
+    FROM employees
+    WHERE activo = 1 AND fecha_ingreso IS NOT NULL
+    HAVING aniversario BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+    ORDER BY DAYOFYEAR(aniversario)
+")->fetchAll();
+
 // Distribución por departamento
 $deptos = $db->query("SELECT departamento, COUNT(*) AS total FROM employees WHERE activo = 1 AND departamento IS NOT NULL AND departamento != '' GROUP BY departamento ORDER BY total DESC")->fetchAll();
 
@@ -161,6 +172,24 @@ $fechaLarga = $diasSemana[(int)date('w')] . ', ' . (int)date('d') . ' de ' . $me
                     <div class="birthday-info">
                         <span class="birthday-name"><?= h($c['nombre'] . ' ' . $c['apellido_paterno']) ?></span>
                         <span class="birthday-date"><?= formatDate($c['fecha_nacimiento']) ?></span>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
+<!-- Aniversarios de antigüedad -->
+<?php if (count($aniversarios) > 0): ?>
+    <div class="card">
+        <h3 class="card-title"><i class="fa-solid fa-medal" style="margin-right:6px;color:var(--color-warning);"></i> Aniversarios próximos (30 días)</h3>
+        <div class="birthday-scroll">
+            <?php foreach ($aniversarios as $a): ?>
+                <div class="birthday-chip">
+                    <span class="birthday-avatar anniversary-avatar"><?= h(strtoupper(substr($a['nombre'], 0, 1))) ?></span>
+                    <div class="birthday-info">
+                        <span class="birthday-name"><?= h($a['nombre'] . ' ' . $a['apellido_paterno']) ?></span>
+                        <span class="birthday-date">Cumple <?= (int)$a['anios_cumplidos'] + 1 ?> año(s) &middot; <?= formatDate($a['aniversario']) ?></span>
                     </div>
                 </div>
             <?php endforeach; ?>

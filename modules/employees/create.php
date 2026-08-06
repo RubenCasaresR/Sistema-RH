@@ -72,6 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateRFC($data['rfc'])) $errors[] = 'El RFC no tiene un formato válido.';
     if (!validateNSS($data['nss'])) $errors[] = 'El NSS debe contener exactamente 11 dígitos.';
 
+    $generosValidos = ['M', 'F', 'Otro'];
+    if (!in_array($data['genero'], $generosValidos, true)) {
+        $errors[] = 'Género no válido.';
+        $data['genero'] = null;
+    }
+
     if ($data['email'] !== '' && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'El correo electrónico no es válido.';
     }
@@ -118,9 +124,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($newPassword === '') {
             $errors[] = 'La contraseña es obligatoria.';
-        } elseif (strlen($newPassword) < 6) {
-            $errors[] = 'La contraseña debe tener al menos 8 caracteres.';
-        } elseif ($newPassword !== $newPasswordConfirm) {
+        } else {
+            $policyError = validatePasswordPolicy($newPassword);
+            if ($policyError !== null) {
+                $errors[] = $policyError;
+            }
+        }
+        if ($newPassword !== $newPasswordConfirm) {
             $errors[] = 'Las contraseñas no coinciden.';
         }
         if (!in_array($newRole, $roles, true)) {
@@ -134,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (count($errors) === 0) {
             $userEmail = $data['email'] !== '' ? $data['email'] : $newUsername . '@sin-correo.local';
-            $insertUser = $db->prepare("INSERT INTO users (username, email, password_hash, role_id, activo) VALUES (:u, :e, :p, :r, 1)");
+            $insertUser = $db->prepare("INSERT INTO users (username, email, password_hash, role_id, activo, password_change_required) VALUES (:u, :e, :p, :r, 1, 1)");
             $insertUser->execute([
                 ':u' => $newUsername,
                 ':e' => $userEmail,

@@ -37,6 +37,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(APP_URL . '/modules/leave/approval.php');
         }
 
+        if ($esJefe) {
+            if (!$miDepto) {
+                setFlash('danger', 'Tu cuenta no está vinculada a un departamento. Contacta al administrador.');
+                redirect(APP_URL . '/modules/leave/approval.php');
+            }
+            $stmtChk = $db->prepare("
+                SELECT e.departamento
+                FROM leave_requests lr
+                INNER JOIN employees e ON e.id = lr.employee_id
+                WHERE lr.id = :id AND lr.estatus = 'pendiente'
+                LIMIT 1
+            ");
+            $stmtChk->execute([':id' => $requestId]);
+            $deptSolicitud = $stmtChk->fetchColumn();
+            if (!$deptSolicitud || $deptSolicitud !== $miDepto) {
+                setFlash('danger', 'No puedes aprobar solicitudes de empleados de otros departamentos.');
+                redirect(APP_URL . '/modules/leave/approval.php');
+            }
+        }
+
         $nuevoEstatus = $action === 'aprobar' ? 'aprobado' : 'rechazado';
         $userId = (int)$_SESSION['user_id'];
 
@@ -296,7 +316,7 @@ $totalPagHist = max(1, (int)ceil($totalHist / 50));
                            style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:0.85rem;"
                            id="comentarios_<?= (int)$r['id'] ?>">
                     <button type="submit" name="action" value="aprobar" class="btn btn-sm btn-primary"
-                            onclick="return confirm('¿Aprobar solicitud de <?= h($r['nombre'] . ' ' . $r['apellido_paterno']) ?> — <?= $tipoLabels[$r['tipo']] ?? $r['tipo'] ?> (<?= (int)$r['dias_solicitados'] ?> días)? <?php if ($r['tipo'] === 'vacaciones'): ?>Saldo: <?= $saldoEmp ?>/<?= $diasPorLeyEmp ?> días. <?php endif; ?>')">Aprobar</button>
+                            onclick="return confirm('¿Aprobar esta solicitud?')">Aprobar</button>
                     <button type="submit" name="action" value="rechazar" class="btn btn-sm btn-secondary">Rechazar</button>
                 </form>
             </div>

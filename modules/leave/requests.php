@@ -51,6 +51,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $motivo = trim($_POST['motivo'] ?? '');
 
     if ($employeeId <= 0) $errors[] = 'Empleado no válido.';
+    $esAdmin = in_array($userRole, ['Administrador RH', 'Gerente RH'], true);
+    if (!$esAdmin && (!$myEmployee || $employeeId !== (int)$myEmployee['id'])) {
+        $errors[] = 'Solo puedes solicitar permisos a tu nombre.';
+    }
     if (!in_array($tipo, ['vacaciones', 'permiso_con_goce', 'permiso_sin_goce', 'incapacidad'])) $errors[] = 'Tipo inválido.';
     if (!$fechaInicio || !$fechaFin) $errors[] = 'Fechas requeridas.';
     if ($fechaInicio > $fechaFin) $errors[] = 'La fecha fin debe ser posterior a la inicio.';

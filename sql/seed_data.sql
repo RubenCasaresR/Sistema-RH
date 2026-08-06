@@ -52,9 +52,12 @@ INSERT INTO role_permissions (role_id, permission_id)
 SELECT 2, id FROM permissions
 WHERE clave NOT IN ('payroll.calculate');
 
--- Usuario administrador por defecto (password: admin123)
+-- Usuario administrador por defecto.
+-- Contraseña generada aleatoriamente (no documentada). El primer login fuerza el cambio
+-- de contraseña (ver fase6_security_audit.sql, columna password_change_required).
+-- Para regenerar el hash: php -r "echo password_hash('CLAVE_TEMPORAL', PASSWORD_BCRYPT, ['cost'=>12]);"
 INSERT INTO users (username, email, password_hash, role_id, activo) VALUES
-('admin', 'admin@sistema-rh.com', '$2y$12$I4kdB2YXO5ANaaUvmGyIguhsRqi/d1NclR4Z7s28e86cxG3cO.lJO', 1, 1);
+('admin', 'admin@sistema-rh.com', '$2y$12$HPeIxSl7CJcT4yekVkIjiuDiedjuCHKK81IZ5Vzu8Bj4vqZPRpKD.', 1, 1);
 
 -- Empleado de ejemplo
 INSERT INTO employees (

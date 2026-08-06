@@ -476,6 +476,25 @@ function handleIncidenciasUpdate(PDO $db): void
         return;
     }
 
+    $validTipos = ["conflicto_interpersonal", "queja", "falta_disciplinaria", "incumplimiento_politica", "otro"];
+    $validResultados = ["resuelto", "en_seguimiento", "escalado_direccion", "sin_resolucion"];
+
+    if (isset($input["tipo"]) && !in_array($input["tipo"], $validTipos, true)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "message" => "Tipo de incidencia inválido."]);
+        return;
+    }
+    if (isset($input["resultado"]) && !in_array($input["resultado"], $validResultados, true)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "message" => "Resultado inválido."]);
+        return;
+    }
+    if (isset($input["fecha"]) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $input["fecha"])) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "message" => "Fecha inválida."]);
+        return;
+    }
+
     $fields = [];
     $params = [":id" => $id];
     $allowed = ["fecha", "personas_involucradas", "area", "tipo_incidencia", "descripcion", "atencion", "resultado", "fecha_seguimiento"];

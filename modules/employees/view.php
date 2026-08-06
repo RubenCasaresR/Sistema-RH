@@ -133,7 +133,7 @@ $tipoLabels = [
     <div class="card profile-header-card" style="display:flex;align-items:center;gap:20px;">
         <div style="flex-shrink:0;">
             <?php if ($emp['foto_url']): ?>
-                <img src="<?= APP_URL ?>/<?= $emp['foto_url'] ?>" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid var(--color-primary);">
+                <img src="<?= APP_URL ?>/api/photo.php?employee_id=<?= (int)$emp['id'] ?>" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid var(--color-primary);">
             <?php else: ?>
                 <div style="width:100px;height:100px;border-radius:50%;background:var(--color-surface-alt);display:flex;align-items:center;justify-content:center;border:3px solid var(--color-border);">
                     <span style="font-size:2.5rem;color:#999;"><?= h(strtoupper(substr($emp['nombre'], 0, 1))) ?></span>
@@ -165,7 +165,7 @@ $tipoLabels = [
             <dd><code><?= h($emp['nss']) ?></code></dd>
             <?php if ($emp['genero']): ?>
                 <dt>Género</dt>
-                <dd><?= ['M' => 'Masculino', 'F' => 'Femenino', 'Otro' => 'Otro'][$emp['genero']] ?? $emp['genero'] ?></dd>
+                <dd><?= h(['M' => 'Masculino', 'F' => 'Femenino', 'Otro' => 'Otro'][$emp['genero']] ?? $emp['genero']) ?></dd>
             <?php endif; ?>
         </dl>
     </div>

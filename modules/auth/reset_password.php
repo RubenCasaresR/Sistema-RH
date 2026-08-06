@@ -11,17 +11,18 @@ if (isLoggedIn()) {
 $token = trim($_GET['token'] ?? '');
 $email = trim($_GET['email'] ?? '');
 
-if ($token === '' || $email === '') {
+if ($token === '' || $email === '' || !preg_match('/^[a-f0-9]{64}$/', $token)) {
     $invalidLink = true;
 } else {
     try {
         $db = getDB();
+        $tokenHash = hash('sha256', $token);
         $stmt = $db->prepare("
             SELECT id FROM password_resets
             WHERE token = :token AND email = :email AND used = 0 AND expires_at > NOW()
             LIMIT 1
         ");
-        $stmt->execute([':token' => $token, ':email' => $email]);
+        $stmt->execute([':token' => $tokenHash, ':email' => $email]);
         $valid = (bool)$stmt->fetch();
         $invalidLink = !$valid;
     } catch (PDOException $e) {
@@ -67,6 +68,7 @@ $extraJs = ['login'];
             </div>
             <a href="<?= APP_URL ?>/modules/auth/login.php" class="forgot-link" style="text-align:center;margin-top:16px;display:block;">Volver al inicio de sesión</a>
         <?php else: ?>
+        <?php $csrfToken = generateCSRFToken(); ?>
 
         <div id="resetError" class="form-error" style="display:none;"></div>
         <div id="resetSuccess" class="form-success" style="display:none;"></div>
@@ -74,6 +76,7 @@ $extraJs = ['login'];
         <form id="resetForm" class="login-form" method="POST" autocomplete="off" novalidate>
             <input type="hidden" name="token" value="<?= h($token) ?>">
             <input type="hidden" name="email" value="<?= h($email) ?>">
+            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
 
             <div class="form-group">
                 <label for="password">Nueva contraseña</label>
@@ -168,7 +171,8 @@ $extraJs = ['login'];
                         token: form.querySelector('input[name="token"]').value,
                         email: form.querySelector('input[name="email"]').value,
                         password: password,
-                        confirm_password: confirm
+                        confirm_password: confirm,
+                        csrf_token: form.querySelector('input[name="csrf_token"]').value
                     })
                 });
 

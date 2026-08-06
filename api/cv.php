@@ -6,7 +6,7 @@ requireAuth();
 header('Content-Type: application/json; charset=utf-8');
 
 $candidateId = (int)($_GET['candidate_id'] ?? 0);
-$token = $_GET['token'] ?? '';
+$token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
 
 if ($candidateId <= 0 || !verifyCSRFToken($token)) {
     http_response_code(400);
@@ -41,6 +41,15 @@ if (!file_exists($filePath)) {
     echo json_encode(['success' => false, 'message' => 'Archivo no encontrado en el servidor.']);
     exit;
 }
+
+$baseDir = realpath(__DIR__ . '/../uploads') ?: '';
+$resolved = realpath($filePath);
+if ($resolved === false || $baseDir === '' || strpos($resolved, $baseDir . DIRECTORY_SEPARATOR) !== 0) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Archivo no permitido.']);
+    exit;
+}
+$filePath = $resolved;
 
 $mimeTypes = [
     'pdf'  => 'application/pdf',

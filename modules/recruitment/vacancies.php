@@ -117,7 +117,7 @@ $totalPaginas = max(1, (int)ceil($totalVac / $porPagina));
                                     <?= (int)$v['total_candidatos'] ?> candidatos
                                 </a>
                             </td>
-                            <td><span class="badge badge-<?= $estatusColors[$v['estatus']] ?>"><?= $estatusLabels[$v['estatus']] ?></span></td>
+                            <td><span class="badge badge-<?= h($estatusColors[$v['estatus']] ?? 'secondary') ?>"><?= h($estatusLabels[$v['estatus']] ?? $v['estatus']) ?></span></td>
                             <td><?= formatDate($v['created_at']) ?></td>
                             <td class="actions-cell">
                                 <a href="<?= APP_URL ?>/modules/recruitment/candidates.php?vacancy_id=<?= (int)$v['id'] ?>" class="btn btn-sm btn-ghost">Candidatos</a>

@@ -11,8 +11,20 @@ $db = getDB();
 $errors = [];
 $periodId = (int)($_GET['period_id'] ?? 0);
 
+$stmtP = $db->prepare("SELECT * FROM payroll_periods WHERE id = :id LIMIT 1");
+$stmtP->execute([':id' => $periodId]);
+$period = $stmtP->fetch();
+
+if (!$period) {
+    setFlash('danger', 'Período no encontrado.');
+    redirect(APP_URL . '/modules/payroll/index.php');
+}
+
+$periodoCerrado = $period['estatus'] === 'cerrado';
+
 // --- CRUD Bonos ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_bonus') {
+    if ($periodoCerrado) { $errors[] = 'No puedes modificar un período cerrado.'; }
     $csrfToken = $_POST['csrf_token'] ?? '';
     if (!verifyCSRFToken($csrfToken)) { $errors[] = 'Token inválido.'; }
     $empId = (int)($_POST['employee_id'] ?? 0);
@@ -30,16 +42,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_bonus') {
+    if ($periodoCerrado) { $errors[] = 'No puedes modificar un período cerrado.'; }
     $csrfToken = $_POST['csrf_token'] ?? '';
     if (!verifyCSRFToken($csrfToken)) { $errors[] = 'Token inválido.'; }
     $bonusId = (int)($_POST['id'] ?? 0);
-    $db->prepare("DELETE FROM payroll_bonus WHERE id = :id AND period_id = :pid")
-       ->execute([':id' => $bonusId, ':pid' => $periodId]);
-    redirect(APP_URL . '/modules/payroll/calculate.php?period_id=' . $periodId);
+    if (count($errors) === 0) {
+        $db->prepare("DELETE FROM payroll_bonus WHERE id = :id AND period_id = :pid")
+           ->execute([':id' => $bonusId, ':pid' => $periodId]);
+        redirect(APP_URL . '/modules/payroll/calculate.php?period_id=' . $periodId);
+    }
 }
 
 // --- CRUD Ajustes manuales ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_adjustment') {
+    if ($periodoCerrado) { $errors[] = 'No puedes modificar un período cerrado.'; }
     $csrfToken = $_POST['csrf_token'] ?? '';
     if (!verifyCSRFToken($csrfToken)) { $errors[] = 'Token inválido.'; }
     $empId = (int)($_POST['employee_id'] ?? 0);
@@ -60,27 +76,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_adjustment') {
+    if ($periodoCerrado) { $errors[] = 'No puedes modificar un período cerrado.'; }
     $csrfToken = $_POST['csrf_token'] ?? '';
     if (!verifyCSRFToken($csrfToken)) { $errors[] = 'Token inválido.'; }
     $adjId = (int)($_POST['id'] ?? 0);
-    $db->prepare("DELETE FROM payroll_adjustments WHERE id = :id AND period_id = :pid")
-       ->execute([':id' => $adjId, ':pid' => $periodId]);
-    redirect(APP_URL . '/modules/payroll/calculate.php?period_id=' . $periodId);
-}
-
-$stmtP = $db->prepare("SELECT * FROM payroll_periods WHERE id = :id LIMIT 1");
-$stmtP->execute([':id' => $periodId]);
-$period = $stmtP->fetch();
-
-if (!$period) {
-    setFlash('danger', 'Período no encontrado.');
-    redirect(APP_URL . '/modules/payroll/index.php');
+    if (count($errors) === 0) {
+        $db->prepare("DELETE FROM payroll_adjustments WHERE id = :id AND period_id = :pid")
+           ->execute([':id' => $adjId, ':pid' => $periodId]);
+        redirect(APP_URL . '/modules/payroll/calculate.php?period_id=' . $periodId);
+    }
 }
 
 $resultado = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'calculate') {
+    if ($periodoCerrado) { $errors[] = 'No puedes modificar un período cerrado.'; }
     $csrfToken = $_POST['csrf_token'] ?? '';
     if (!verifyCSRFToken($csrfToken)) { $errors[] = 'Token inválido.'; }
+    if (count($errors) === 0) {
 
     try {
         $db->beginTransaction();
@@ -91,14 +103,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         $insertStmt = $db->prepare("
             INSERT INTO payroll_items
-                (period_id, employee_id, salario_base, salario_diario, total_bonos, total_deducciones, total_incidencias,
-                 sueldo_bruto, sueldo_neto, dias_trabajados, faltas, retardos, descuento_retardos, horas_extras,
-                 isr_retener, imss_obrero, subsidio_empleo, aguinaldo_proporcional, prima_vacacional,
+                (period_id, employee_id, salario_base, salario_diario, salario_periodo, total_bonos, total_deducciones, total_incidencias,
+                 sueldo_bruto, sueldo_neto, dias_trabajados, dias_laborables, faltas, retardos, descuento_retardos, horas_extras,
+                 isr_retener, imss_obrero, subsidio_empleo, subsidio_compensable, aguinaldo_proporcional, prima_vacacional,
                  percepciones_total, deducciones_total)
             VALUES
-                (:pid, :eid, :sb, :sd, :bonos, :td, :ti,
-                 :bruto, :neto, :dt, :faltas, :retardos, :dr, :he,
-                 :isr, :imss, :subsidio, :aguinaldo, :prima,
+                (:pid, :eid, :sb, :sd, :sp, :bonos, :td, :ti,
+                 :bruto, :neto, :dt, :dl, :faltas, :retardos, :dr, :he,
+                 :isr, :imss, :subsidio, :subcomp, :aguinaldo, :prima,
                  :perc, :ded)
         ");
 
@@ -128,12 +140,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 ':eid'       => (int)$emp['id'],
                 ':sb'        => $calc['salario_base'],
                 ':sd'        => $calc['salario_diario'],
+                ':sp'        => $calc['salario_periodo'],
                 ':bonos'     => $calc['total_bonos'],
                 ':td'        => $calc['total_deducciones'],
                 ':ti'        => $calc['total_incidencias'],
                 ':bruto'     => $calc['sueldo_bruto'],
                 ':neto'      => $calc['sueldo_neto'],
                 ':dt'        => $calc['dias_trabajados'],
+                ':dl'        => $calc['dias_laborables'],
                 ':faltas'    => $calc['faltas'],
                 ':retardos'  => $calc['retardos'],
                 ':dr'        => $calc['descuento_retardos'],
@@ -141,6 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 ':isr'       => $calc['isr_retener'],
                 ':imss'      => $calc['imss_obrero'],
                 ':subsidio'  => $calc['subsidio_empleo'],
+                ':subcomp'   => $calc['subsidio_compensable'],
                 ':aguinaldo' => $calc['aguinaldo_proporcional'],
                 ':prima'     => $calc['prima_vacacional'],
                 ':perc'      => $calc['percepciones_total'],
@@ -181,6 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $db->rollBack();
         error_log('Error cálculo nómina: ' . $e->getMessage());
         $errors[] = 'Error al calcular nómina. Consulta el registro del sistema.';
+    }
     }
 }
 
@@ -341,11 +357,11 @@ $csrfToken = generateCSRFToken();
                             <td><strong><?= h($i['nombre'] . ' ' . $i['apellido_paterno']) ?></strong></td>
                             <td><?= h($i['puesto'] ?? '—') ?></td>
                             <td class="text-right"><?= formatCurrency($sd) ?></td>
-                            <td class="text-center"><?= (int)$i['dias_trabajados'] ?> / <?= (int)$i['dias_trabajados'] + (int)$i['faltas'] ?></td>
+                            <td class="text-center"><?= (int)$i['dias_trabajados'] ?> / <?= (int)($i['dias_laborables'] ?? ((int)$i['dias_trabajados'] + (int)$i['faltas'])) ?></td>
                             <td class="text-center">
                                 <span class="badge badge-<?= $i['faltas'] > 0 ? 'danger' : 'success' ?>"><?= (int)$i['faltas'] ?></span>
                             </td>
-                            <td class="text-right"><?= formatCurrency($sd * (int)$i['dias_trabajados']) ?></td>
+                            <td class="text-right"><?= formatCurrency((float)($i['salario_periodo'] ?? ($sd * (int)$i['dias_trabajados']))) ?></td>
                             <td class="text-right" title="<?= $hd ?>h dobles + <?= $ht ?>h triples"><?= $he > 0 ? formatCurrency($horasExtraPay) : '—' ?></td>
                             <td class="text-right"><?= (float)$i['total_bonos'] > 0 ? formatCurrency((float)$i['total_bonos']) : '—' ?></td>
                             <td class="text-right"><?= (float)$i['aguinaldo_proporcional'] > 0 ? formatCurrency((float)$i['aguinaldo_proporcional']) : '—' ?></td>
@@ -367,7 +383,7 @@ $csrfToken = generateCSRFToken();
                 <tr>
                     <th colspan="5">Totales</th>
                     <th class="text-center"><?= (int)$totales['faltas'] ?></th>
-                    <th class="text-right"><?= formatCurrency(array_sum(array_map(function($i) { return (float)$i['salario_base'] / 30 * (int)$i['dias_trabajados']; }, $items))) ?></th>
+                    <th class="text-right"><?= formatCurrency(array_sum(array_map(function($i) { return (float)($i['salario_periodo'] ?? ((float)$i['salario_base'] / 30 * (int)$i['dias_trabajados'])); }, $items))) ?></th>
                     <th class="text-right"><?= formatCurrency(array_sum(array_map(function($i) { $sd = (float)$i['salario_diario']; $he = (int)$i['horas_extras']; $hd = min(9, $he); $ht = max(0, $he - 9); return $hd * ($sd / 8) * 2 + $ht * ($sd / 8) * 3; }, $items))) ?></th>
                     <th class="text-right"><?= formatCurrency(array_sum(array_column($items, 'total_bonos'))) ?></th>
                     <th class="text-right"><?= formatCurrency($totales['aguinaldo']) ?></th>
@@ -522,6 +538,11 @@ $csrfToken = generateCSRFToken();
 
 <script>
 const itemsData = <?= json_encode($items) ?>;
+function esc(v) {
+    return String(v ?? "").replace(/[&<>"']/g, function(c) {
+        return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+}
 function mostrarDesglose(idx) {
     const container = document.getElementById('desgloseContainer');
     if (idx === '') { container.innerHTML = '<p class="empty-state">Selecciona un empleado para ver su desglose.</p>'; return; }
@@ -537,11 +558,12 @@ function mostrarDesglose(idx) {
     <div class="payroll-breakdown">
         <div class="breakdown-section">
             <h4>Percepciones</h4>
-            <div class="breakdown-row"><span>Salario del período</span><span>${fmt(sd * i.dias_trabajados)}</span></div>
+            <div class="breakdown-row"><span>Salario del período</span><span>${fmt(parseFloat(i.salario_periodo) || sd * i.dias_trabajados)}</span></div>
             ${he > 0 ? `<div class="breakdown-row"><span>Horas extra (${hd}h dobles + ${ht}h triples)</span><span>${fmt(hePay)}</span></div>` : ''}
             ${tieneBonos ? `<div class="breakdown-row"><span>Bonos</span><span>${fmt(i.total_bonos)}</span></div>` : ''}
             ${parseFloat(i.aguinaldo_proporcional) > 0 ? `<div class="breakdown-row"><span>Aguinaldo proporcional</span><span>${fmt(i.aguinaldo_proporcional)}</span></div>` : ''}
             ${parseFloat(i.prima_vacacional) > 0 ? `<div class="breakdown-row"><span>Prima vacacional</span><span>${fmt(i.prima_vacacional)}</span></div>` : ''}
+            ${parseFloat(i.subsidio_compensable) > 0 ? `<div class="breakdown-row" style="color:var(--color-success);"><span>Subsidio al empleo compensado (LISR)</span><span>+${fmt(i.subsidio_compensable)}</span></div>` : ''}
             <div class="breakdown-row breakdown-total"><span>Total percepciones</span><span>${fmt(i.percepciones_total)}</span></div>
         </div>
         <div class="breakdown-section">
@@ -591,21 +613,22 @@ function openRecibo(idx) {
         <p style="margin:4px 0 0;font-size:0.9rem;">Período: ${i.periodo || '<?= h($period['periodo']) ?>'}</p>
     </div>
     <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
-        <div><strong>Empleado:</strong> ${i.nombre} ${i.apellido_paterno} ${i.apellido_materno || ''}</div>
-        <div><strong>Puesto:</strong> ${i.puesto || '—'}</div>
+        <div><strong>Empleado:</strong> ${esc(i.nombre)} ${esc(i.apellido_paterno)} ${esc(i.apellido_materno) || ''}</div>
+        <div><strong>Puesto:</strong> ${esc(i.puesto) || '—'}</div>
     </div>
     <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
-        <div><strong>Departamento:</strong> ${i.departamento || '—'}</div>
+        <div><strong>Departamento:</strong> ${esc(i.departamento) || '—'}</div>
         <div><strong>Salario diario:</strong> ${fmt(sd)}</div>
     </div>
     <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
         <tr style="background:#f0f0f0;"><th style="text-align:left;padding:8px;border:1px solid #ccc;">Concepto</th><th style="text-align:right;padding:8px;border:1px solid #ccc;">Importe</th></tr>
-        <tr><td style="padding:6px 8px;border:1px solid #ccc;">Días trabajados</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">${i.dias_trabajados} / ${i.dias_trabajados + i.faltas}</td></tr>
-        <tr><td style="padding:6px 8px;border:1px solid #ccc;">Salario del período</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">${fmt(sd * i.dias_trabajados)}</td></tr>
+        <tr><td style="padding:6px 8px;border:1px solid #ccc;">Días trabajados</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">${i.dias_trabajados} / ${parseInt(i.dias_laborables) || (i.dias_trabajados + i.faltas)}</td></tr>
+        <tr><td style="padding:6px 8px;border:1px solid #ccc;">Salario del período</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">${fmt(parseFloat(i.salario_periodo) || sd * i.dias_trabajados)}</td></tr>
         ${he > 0 ? `<tr><td style="padding:6px 8px;border:1px solid #ccc;">Horas extra (${hd}h dobles + ${ht}h triples)</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">${fmt(hePay)}</td></tr>` : ''}
         ${tieneBonos ? `<tr><td style="padding:6px 8px;border:1px solid #ccc;">Bonos</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">${fmt(i.total_bonos)}</td></tr>` : ''}
         ${parseFloat(i.aguinaldo_proporcional) > 0 ? `<tr><td style="padding:6px 8px;border:1px solid #ccc;">Aguinaldo proporcional</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">${fmt(i.aguinaldo_proporcional)}</td></tr>` : ''}
         ${parseFloat(i.prima_vacacional) > 0 ? `<tr><td style="padding:6px 8px;border:1px solid #ccc;">Prima vacacional</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">${fmt(i.prima_vacacional)}</td></tr>` : ''}
+        ${parseFloat(i.subsidio_compensable) > 0 ? `<tr style="color:var(--color-success);"><td style="padding:6px 8px;border:1px solid #ccc;">Subsidio al empleo compensado (LISR)</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">+${fmt(i.subsidio_compensable)}</td></tr>` : ''}
         <tr style="background:#e8f5e9;"><td style="padding:6px 8px;border:1px solid #ccc;"><strong>Total percepciones</strong></td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;"><strong>${fmt(i.percepciones_total)}</strong></td></tr>
         <tr><td style="padding:6px 8px;border:1px solid #ccc;">ISR (LISR Art. 96)</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">—${fmt(i.isr_retener)}</td></tr>
         ${parseFloat(i.subsidio_empleo) > 0 ? `<tr style="color:var(--color-success);"><td style="padding:6px 8px;border:1px solid #ccc;">Subsidio al empleo</td><td style="text-align:right;padding:6px 8px;border:1px solid #ccc;">+${fmt(i.subsidio_empleo)}</td></tr>` : ''}

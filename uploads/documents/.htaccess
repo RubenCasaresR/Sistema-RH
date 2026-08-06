@@ -1,0 +1,3 @@
+# Bloquear acceso directo a documentos de empleados.
+# Los archivos se sirven únicamente vía api/files.php (con sesión y permisos).
+Require all denied

@@ -1,3 +1,9 @@
-ALTER TABLE payroll_periods
-    ADD COLUMN tipo_periodo ENUM('mensual', 'quincenal') NOT NULL DEFAULT 'mensual'
-    AFTER periodo;
+-- ============================================================
+-- FASE 19: (CANCELADA)
+-- La columna `tipo_periodo` ya fue agregada en FASE 5
+-- (fase5_payroll_dashboard.sql). Esta migración originalmente
+-- intentaba agregarla de nuevo, lo que provocaba
+-- "Duplicate column name 'tipo_periodo'" al ejecutarse.
+-- Mantener este archivo como no-op para no romper el orden de
+-- las fases. La estructura quedó definida en fase5.
+-- ============================================================

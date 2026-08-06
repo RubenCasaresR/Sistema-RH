@@ -20,7 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $employeeId = (int)($_POST['employee_id'] ?? 0);
 
         if ($username === '') $errors[] = 'El nombre de usuario es obligatorio.';
-        if (strlen($password) < 8) $errors[] = 'La contraseña debe tener al menos 8 caracteres.';
+        $policyError = validatePasswordPolicy($password);
+        if ($policyError !== null) $errors[] = $policyError;
         if (!in_array($role, $roles, true)) $errors[] = 'Rol no válido.';
 
         $check = $db->prepare("SELECT id FROM users WHERE username = :u");
@@ -43,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$roleId) $errors[] = 'Rol no encontrado en la base de datos.';
 
         if (count($errors) === 0) {
-            $stmt = $db->prepare("INSERT INTO users (username, email, password_hash, role_id, activo) VALUES (:u, :e, :p, :r, 1)");
+            $stmt = $db->prepare("INSERT INTO users (username, email, password_hash, role_id, activo, password_change_required) VALUES (:u, :e, :p, :r, 1, 1)");
             $stmt->execute([':u' => $username, ':e' => $email, ':p' => hashPassword($password), ':r' => $roleId]);
             $newId = (int)$db->lastInsertId();
 

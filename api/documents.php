@@ -60,6 +60,17 @@ function handleList(PDO $db): void
     $params = [];
     $where = 'WHERE 1=1';
 
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'own') {
+        $where .= ' AND e.id = :scope_eid';
+        $params[':scope_eid'] = $scope['id'];
+    } elseif ($scope['type'] === 'dept') {
+        $where .= ' AND e.departamento = :scope_depto';
+        $params[':scope_depto'] = $scope['id'];
+    } elseif ($scope['type'] === 'none') {
+        $where .= ' AND 1=0';
+    }
+
     if ($employeeId > 0) {
         $where .= ' AND d.employee_id = :emp_id';
         $params[':emp_id'] = $employeeId;
@@ -87,7 +98,9 @@ function handleList(PDO $db): void
     }
 
     $stmt = $db->prepare("
-        SELECT d.*, e.nombre, e.apellido_paterno, e.apellido_materno,
+        SELECT d.id, d.employee_id, d.tipo_documento, d.nombre_original, d.mime_type,
+               d.peso_bytes, d.hash_firma, d.fecha_firma, d.notas, d.created_at,
+               e.nombre, e.apellido_paterno, e.apellido_materno,
                (SELECT COUNT(*) FROM document_versions WHERE document_id = d.id) as version_count
         FROM employee_documents d
         INNER JOIN employees e ON e.id = d.employee_id
@@ -110,8 +123,30 @@ function handleVersions(PDO $db): void
         return;
     }
 
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] !== 'all') {
+        $stmtOwn = $db->prepare("SELECT ed.employee_id, e.departamento FROM employee_documents ed INNER JOIN employees e ON e.id = ed.employee_id WHERE ed.id = :id LIMIT 1");
+        $stmtOwn->execute([':id' => $docId]);
+        $own = $stmtOwn->fetch();
+        if (!$own) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Documento no encontrado.']);
+            return;
+        }
+        if ($scope['type'] === 'own' && (int)$own['employee_id'] !== $scope['id']) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'No puedes ver los documentos de otro empleado.']);
+            return;
+        }
+        if ($scope['type'] === 'dept' && $own['departamento'] !== $scope['id']) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'No puedes ver los documentos de otros departamentos.']);
+            return;
+        }
+    }
+
     // Get current document as version 0
-    $stmt = $db->prepare("SELECT id, nombre_original, nombre_archivo, archivo_ruta, mime_type, peso_bytes, hash_firma, fecha_firma, created_at FROM employee_documents WHERE id = :id");
+    $stmt = $db->prepare("SELECT id, nombre_original, mime_type, peso_bytes, hash_firma, fecha_firma, created_at FROM employee_documents WHERE id = :id");
     $stmt->execute([':id' => $docId]);
     $current = $stmt->fetch();
 
@@ -150,8 +185,19 @@ function handleExport(PDO $db): void
     $params = [];
     $where = 'WHERE 1=1';
 
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'own') {
+        $where .= ' AND e.id = :scope_eid';
+        $params[':scope_eid'] = $scope['id'];
+    } elseif ($scope['type'] === 'dept') {
+        $where .= ' AND e.departamento = :scope_depto';
+        $params[':scope_depto'] = $scope['id'];
+    } elseif ($scope['type'] === 'none') {
+        $where .= ' AND 1=0';
+    }
+
     if ($employeeId > 0) {
-        $where = 'WHERE d.employee_id = :emp_id';
+        $where .= ' AND d.employee_id = :emp_id';
         $params[':emp_id'] = $employeeId;
     }
 
@@ -172,19 +218,28 @@ function handleExport(PDO $db): void
     $output = fopen('php://output', 'w');
     fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF)); // BOM
 
+    $csvCell = function (mixed $value): string {
+        if (is_string($value)) {
+            if ($value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+                $value = "'" . $value;
+            }
+        }
+        return (string)$value;
+    };
+
     fputcsv($output, ['Empleado', 'Tipo', 'Archivo', 'Tipo MIME', 'Peso (Bytes)', 'Firma Digital', 'Fecha Firma', 'Notas', 'Subido']);
 
     foreach ($stmt as $row) {
         fputcsv($output, [
-            $row['nombre'] . ' ' . $row['apellido_paterno'] . ' ' . ($row['apellido_materno'] ?? ''),
-            $row['tipo_documento'],
-            $row['nombre_original'],
-            $row['mime_type'],
-            $row['peso_bytes'],
-            $row['hash_firma'] ? 'Sí' : 'No',
-            $row['fecha_firma'] ?? '',
-            $row['notas'] ?? '',
-            $row['created_at'],
+            $csvCell($row['nombre'] . ' ' . $row['apellido_paterno'] . ' ' . ($row['apellido_materno'] ?? '')),
+            $csvCell($row['tipo_documento']),
+            $csvCell($row['nombre_original']),
+            $csvCell($row['mime_type']),
+            $csvCell($row['peso_bytes']),
+            $csvCell($row['hash_firma'] ? 'Sí' : 'No'),
+            $csvCell($row['fecha_firma'] ?? ''),
+            $csvCell($row['notas'] ?? ''),
+            $csvCell($row['created_at']),
         ]);
     }
 

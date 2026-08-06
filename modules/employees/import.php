@@ -84,6 +84,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                $generoRaw = strtolower(trim((string)($record['genero'] ?? '')));
+                $generosImport = ['m' => 'M', 'f' => 'F', 'otro' => 'Otro'];
+                $genero = $generosImport[$generoRaw] ?? null;
+
                 $empData = [
                     ':user_id'            => $importUserId,
                     ':nombre'             => $record['nombre'] ?? '',
@@ -93,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':rfc'                => $record['rfc'] ?? '',
                     ':nss'                => $record['nss'] ?? '',
                     ':fecha_nacimiento'   => $record['fecha_nacimiento'] ?? null,
-                    ':genero'             => $record['genero'] ?? '',
+                    ':genero'             => $genero,
                     ':email'              => $record['email'] ?? '',
                     ':telefono'           => $record['telefono'] ?? '',
                     ':calle'              => $record['calle'] ?? '',

@@ -8,6 +8,8 @@ if (isLoggedIn()) {
     redirect(APP_URL . '/modules/reports/dashboard.php');
 }
 
+$csrfToken = generateCSRFToken();
+
 $pageTitle = 'Recuperar contraseña';
 $extraCss = ['login'];
 $extraJs = ['login'];
@@ -43,6 +45,7 @@ $extraJs = ['login'];
         <div id="forgotSuccess" class="form-success" style="display:none;"></div>
 
         <form id="forgotForm" class="login-form" method="POST" autocomplete="off" novalidate>
+            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
             <div class="form-group">
                 <label for="email">Correo electrónico</label>
                 <div class="input-wrapper">
@@ -93,7 +96,10 @@ $extraJs = ['login'];
                 const response = await fetch(APP_URL + '/api/auth.php?action=forgot_password', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email })
+                    body: JSON.stringify({
+                        email: email,
+                        csrf_token: form.querySelector('input[name="csrf_token"]').value
+                    })
                 });
 
                 const data = await response.json();

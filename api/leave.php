@@ -73,6 +73,16 @@ function handleCreate(PDO $db): void
         return;
     }
 
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] !== 'all') {
+        $ownId = currentEmployeeId($db);
+        if ($ownId === null || $employeeId !== $ownId) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Solo puedes solicitar permisos para ti mismo.']);
+            return;
+        }
+    }
+
     try {
         $inicio = new DateTime($fechaInicio);
         $fin = new DateTime($fechaFin);
@@ -124,21 +134,23 @@ function handleApprove(PDO $db): void
         return;
     }
 
-    // Filtro por departamento si es Jefe de área
-    $userRole = $_SESSION['user']['role_name'] ?? '';
-    if ($userRole === 'Jefe de área') {
-        $stmtDepto = $db->prepare("SELECT departamento FROM employees WHERE user_id = :uid AND activo = 1 LIMIT 1");
-        $stmtDepto->execute([':uid' => (int)$_SESSION['user_id']]);
-        $miDepto = $stmtDepto->fetchColumn();
-        if ($miDepto) {
-            $stmtCheck = $db->prepare("SELECT lr.id FROM leave_requests lr INNER JOIN employees e ON e.id = lr.employee_id WHERE lr.id = :rid AND e.departamento = :depto LIMIT 1");
-            $stmtCheck->execute([':rid' => $requestId, ':depto' => $miDepto]);
-            if (!$stmtCheck->fetch()) {
-                http_response_code(403);
-                echo json_encode(['success' => false, 'message' => 'No puedes aprobar solicitudes de otros departamentos.']);
-                return;
-            }
+    // Control de alcance: solo administradores (alcance 'all') o jefes del departamento del solicitante
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'all') {
+        // acceso completo
+    } elseif ($scope['type'] === 'dept') {
+        $stmtCheck = $db->prepare("SELECT lr.id FROM leave_requests lr INNER JOIN employees e ON e.id = lr.employee_id WHERE lr.id = :rid AND e.departamento = :depto LIMIT 1");
+        $stmtCheck->execute([':rid' => $requestId, ':depto' => $scope['id']]);
+        if (!$stmtCheck->fetch()) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'No puedes aprobar solicitudes de otros departamentos.']);
+            return;
         }
+    } else {
+        // Alcance 'own'/'none': no se permite aprobación (evita auto-aprobación y accesos sin vínculo)
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'No tienes permiso para aprobar solicitudes.']);
+        return;
     }
 
     $estatus = $action === 'aprobar' ? 'aprobado' : 'rechazado';
@@ -174,18 +186,31 @@ function handleApprove(PDO $db): void
         $req = null;
     }
 
-    $stmt = $db->prepare("UPDATE leave_requests SET estatus = :estatus, aprobado_por = :uid, fecha_aprobacion = NOW(), comentarios_aprobador = :comentarios WHERE id = :id AND estatus = 'pendiente'");
-    $stmt->execute([':estatus' => $estatus, ':uid' => $userId, ':comentarios' => $comentarios, ':id' => $requestId]);
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare("UPDATE leave_requests SET estatus = :estatus, aprobado_por = :uid, fecha_aprobacion = NOW(), comentarios_aprobador = :comentarios WHERE id = :id AND estatus = 'pendiente'");
+        $stmt->execute([':estatus' => $estatus, ':uid' => $userId, ':comentarios' => $comentarios, ':id' => $requestId]);
 
-    if ($stmt->rowCount() === 0) {
-        echo json_encode(['success' => false, 'message' => 'Solicitud no encontrada o ya procesada.']);
-        return;
+        if ($stmt->rowCount() === 0) {
+            $db->rollBack();
+            echo json_encode(['success' => false, 'message' => 'Solicitud no encontrada o ya procesada.']);
+            return;
+        }
+
+        if ($estatus === 'aprobado' && $req && $req['tipo'] === 'vacaciones') {
+            $stmtB = $db->prepare("INSERT INTO leave_balance (employee_id, periodo, dias_totales, dias_disfrutados) VALUES (:eid, YEAR(CURDATE()), 0, :dias) ON DUPLICATE KEY UPDATE dias_disfrutados = dias_disfrutados + :dias2");
+            $stmtB->execute([':eid' => $req['employee_id'], ':dias' => $req['dias_solicitados'], ':dias2' => $req['dias_solicitados']]);
+        }
+
+        $db->commit();
+    } catch (PDOException $e) {
+        $db->rollBack();
+        throw $e;
     }
 
-    if ($estatus === 'aprobado' && $req && $req['tipo'] === 'vacaciones') {
-        $stmtB = $db->prepare("INSERT INTO leave_balance (employee_id, periodo, dias_totales, dias_disfrutados) VALUES (:eid, YEAR(CURDATE()), 0, :dias) ON DUPLICATE KEY UPDATE dias_disfrutados = dias_disfrutados + :dias2");
-        $stmtB->execute([':eid' => $req['employee_id'], ':dias' => $req['dias_solicitados'], ':dias2' => $req['dias_solicitados']]);
-    }
+    logAudit($action === 'aprobar' ? 'approve' : 'reject', 'leave', $requestId, json_encode([
+        'comentarios' => $comentarios,
+    ]));
 
     echo json_encode(['success' => true, 'message' => 'Solicitud ' . ($action === 'aprobar' ? 'aprobada' : 'rechazada') . '.']);
 }
@@ -202,6 +227,17 @@ function handleList(PDO $db): void
 
     $params = [];
     $where = 'WHERE 1=1';
+
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'own') {
+        $where .= ' AND lr.employee_id = :scope_eid';
+        $params[':scope_eid'] = $scope['id'];
+    } elseif ($scope['type'] === 'dept') {
+        $where .= ' AND e.departamento = :scope_depto';
+        $params[':scope_depto'] = $scope['id'];
+    } elseif ($scope['type'] === 'none') {
+        $where .= ' AND 1=0';
+    }
 
     if (in_array($tipo, ['vacaciones', 'permiso_con_goce', 'permiso_sin_goce', 'incapacidad'])) {
         $where .= ' AND lr.tipo = :tipo';
@@ -238,6 +274,25 @@ function handleBalance(PDO $db): void
     if ($employeeId <= 0) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'employee_id requerido.']);
+        return;
+    }
+
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'own' && $employeeId !== $scope['id']) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'No puedes consultar el saldo de otro empleado.']);
+        return;
+    } elseif ($scope['type'] === 'dept') {
+        $stmtDept = $db->prepare("SELECT departamento FROM employees WHERE id = :id LIMIT 1");
+        $stmtDept->execute([':id' => $employeeId]);
+        if ($stmtDept->fetchColumn() !== $scope['id']) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'No puedes consultar el saldo de empleados de otros departamentos.']);
+            return;
+        }
+    } elseif ($scope['type'] === 'none') {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'No tienes acceso a esta información.']);
         return;
     }
 

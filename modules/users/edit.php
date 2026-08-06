@@ -51,8 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (count($errors) === 0) {
             if ($password !== '') {
-                if (strlen($password) < 8) {
-                    $errors[] = 'La contraseña debe tener al menos 8 caracteres.';
+                $policyError = validatePasswordPolicy($password);
+                if ($policyError !== null) {
+                    $errors[] = $policyError;
                 } else {
                     $stmtU = $db->prepare("UPDATE users SET username = :u, password_hash = :p, role_id = :r, activo = :act, password_change_required = :pcr WHERE id = :id");
                     $stmtU->execute([':u' => $username, ':p' => hashPassword($password), ':r' => $roleId, ':act' => $activo, ':pcr' => $passwordChangeRequired, ':id' => $id]);

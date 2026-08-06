@@ -40,7 +40,7 @@ try {
         case "correction_history": handleCorrectionHistory($db); break;
         default:
             http_response_code(404);
-            echo json_encode(["success" => false, "message" => "Acción no reconocida."]);
+            echo json_encode(["success" => false, "message" => "AcciÃ³n no reconocida."]);
     }
 } catch (PDOException $e) {
     error_log("API Attendance error: " . $e->getMessage());
@@ -54,7 +54,7 @@ function handleClock(PDO $db): void
 
     if ($_SERVER["REQUEST_METHOD"] !== "POST") {
         http_response_code(405);
-        echo json_encode(["success" => false, "message" => "Método no permitido."]);
+        echo json_encode(["success" => false, "message" => "MÃ©todo no permitido."]);
         return;
     }
 
@@ -62,7 +62,7 @@ function handleClock(PDO $db): void
     $csrfToken = $input["csrf_token"] ?? "";
     if (!verifyCSRFToken($csrfToken)) {
         http_response_code(403);
-        echo json_encode(["success" => false, "message" => "Token de seguridad inválido."]);
+        echo json_encode(["success" => false, "message" => "Token de seguridad invÃ¡lido."]);
         return;
     }
 
@@ -71,8 +71,17 @@ function handleClock(PDO $db): void
 
     if ($empId <= 0 || !in_array($action, ["entrada", "salida"], true)) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Datos inválidos."]);
+        echo json_encode(["success" => false, "message" => "Datos invÃ¡lidos."]);
         return;
+    }
+
+    if (!can("employees.read")) {
+        $ownId = currentEmployeeId($db);
+        if ($ownId === null || $empId !== $ownId) {
+            http_response_code(403);
+            echo json_encode(["success" => false, "message" => "Solo puedes registrar tu propia asistencia."]);
+            return;
+        }
     }
 
     $hoy = date("Y-m-d");
@@ -88,7 +97,7 @@ function handleClock(PDO $db): void
         }
         $stmtU = $db->prepare("INSERT INTO attendance_logs (employee_id, fecha, hora_entrada, tipo, ip_address) VALUES (:eid, :fecha, :hora, 'regular', :ip) ON DUPLICATE KEY UPDATE hora_entrada = VALUES(hora_entrada), ip_address = VALUES(ip_address)");
         $stmtU->execute([":eid" => $empId, ":fecha" => $hoy, ":hora" => $ahora, ":ip" => $ip]);
-        logAudit("clock_in", "attendance", $empId, "Entrada registrada vía API");
+        logAudit("clock_in", "attendance", $empId, "Entrada registrada vÃ­a API");
         echo json_encode(["success" => true, "message" => "Entrada registrada: " . date("H:i:s"), "hora" => $ahora]);
     } else {
         $stmtC = $db->prepare("SELECT id FROM attendance_logs WHERE employee_id = :eid AND fecha = :fecha AND tipo = 'regular' AND hora_entrada IS NOT NULL AND hora_salida IS NULL LIMIT 1");
@@ -100,7 +109,7 @@ function handleClock(PDO $db): void
         }
         $stmtU = $db->prepare("UPDATE attendance_logs SET hora_salida = :hora, ip_address = COALESCE(ip_address, :ip) WHERE id = :id");
         $stmtU->execute([":hora" => $ahora, ":ip" => $ip, ":id" => $log["id"]]);
-        logAudit("clock_out", "attendance", $empId, "Salida registrada vía API");
+        logAudit("clock_out", "attendance", $empId, "Salida registrada vÃ­a API");
         echo json_encode(["success" => true, "message" => "Salida registrada: " . date("H:i:s"), "hora" => $ahora]);
     }
 }
@@ -112,6 +121,25 @@ function handleStatus(PDO $db): void
     if ($empId <= 0) {
         http_response_code(400);
         echo json_encode(["success" => false, "message" => "employee_id requerido."]);
+        return;
+    }
+
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'own' && $empId !== $scope['id']) {
+        http_response_code(403);
+        echo json_encode(["success" => false, "message" => "No puedes consultar la asistencia de otro empleado."]);
+        return;
+    } elseif ($scope['type'] === 'dept') {
+        $stmtDepto = $db->prepare("SELECT departamento FROM employees WHERE id = :id LIMIT 1");
+        $stmtDepto->execute([":id" => $empId]);
+        if ($stmtDepto->fetchColumn() !== $scope['id']) {
+            http_response_code(403);
+            echo json_encode(["success" => false, "message" => "No puedes consultar la asistencia de otros departamentos."]);
+            return;
+        }
+    } elseif ($scope['type'] === 'none') {
+        http_response_code(403);
+        echo json_encode(["success" => false, "message" => "No tienes acceso a esta informaciÃ³n."]);
         return;
     }
 
@@ -138,8 +166,18 @@ function handleReport(PDO $db): void
 
     $params = [":inicio" => $fechaInicio, ":fin" => $fechaFin];
     $whereEmployee = "";
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'dept') {
+        $whereEmployee = "AND a.employee_id IN (SELECT id FROM employees WHERE departamento = :scope_depto)";
+        $params[":scope_depto"] = $scope['id'];
+    } elseif ($scope['type'] === 'own') {
+        $whereEmployee = "AND a.employee_id = :scope_eid";
+        $params[":scope_eid"] = $scope['id'];
+    } elseif ($scope['type'] === 'none') {
+        $whereEmployee = "AND 1=0";
+    }
     if ($employeeId > 0) {
-        $whereEmployee = "AND a.employee_id = :emp_id";
+        $whereEmployee .= " AND a.employee_id = :emp_id";
         $params[":emp_id"] = $employeeId;
     }
 
@@ -182,8 +220,18 @@ function handleSummary(PDO $db): void
 
     $params = [":inicio" => $fechaInicio, ":fin" => $fechaFin];
     $whereEmployee = "";
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'dept') {
+        $whereEmployee = "AND e.departamento = :scope_depto";
+        $params[":scope_depto"] = $scope['id'];
+    } elseif ($scope['type'] === 'own') {
+        $whereEmployee = "AND e.id = :scope_eid";
+        $params[":scope_eid"] = $scope['id'];
+    } elseif ($scope['type'] === 'none') {
+        $whereEmployee = "AND 1=0";
+    }
     if ($employeeId > 0) {
-        $whereEmployee = "AND a.employee_id = :emp_id";
+        $whereEmployee .= " AND a.employee_id = :emp_id";
         $params[":emp_id"] = $employeeId;
     }
 
@@ -216,6 +264,8 @@ function handleSummary(PDO $db): void
     $stmt->bindValue(":umbral", "$hL:$mL:00");
     $stmt->bindValue(":inicio2", $fechaInicio);
     $stmt->bindValue(":fin2", $fechaFin);
+    if ($scope['type'] === 'dept') $stmt->bindValue(":scope_depto", $scope['id']);
+    if ($scope['type'] === 'own') $stmt->bindValue(":scope_eid", $scope['id'], PDO::PARAM_INT);
     if ($employeeId > 0) $stmt->bindValue(":emp_id", $employeeId, PDO::PARAM_INT);
     $stmt->execute();
 
@@ -272,6 +322,25 @@ function handleCalendar(PDO $db): void
         return;
     }
 
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'own' && $employeeId !== $scope['id']) {
+        http_response_code(403);
+        echo json_encode(["success" => false, "message" => "No puedes consultar la asistencia de otro empleado."]);
+        return;
+    } elseif ($scope['type'] === 'dept') {
+        $stmtDepto = $db->prepare("SELECT departamento FROM employees WHERE id = :id LIMIT 1");
+        $stmtDepto->execute([":id" => $employeeId]);
+        if ($stmtDepto->fetchColumn() !== $scope['id']) {
+            http_response_code(403);
+            echo json_encode(["success" => false, "message" => "No puedes consultar la asistencia de otros departamentos."]);
+            return;
+        }
+    } elseif ($scope['type'] === 'none') {
+        http_response_code(403);
+        echo json_encode(["success" => false, "message" => "No tienes acceso a esta informaciÃ³n."]);
+        return;
+    }
+
     $inicio = sprintf("%04d-%02d-01", $anio, $mes);
     $fin = date("Y-m-t", strtotime($inicio));
 
@@ -319,8 +388,18 @@ function handleExport(PDO $db): void
 
     $params = [":inicio" => $fechaInicio, ":fin" => $fechaFin];
     $whereEmployee = "";
+    $scope = resolveEmployeeScope($db);
+    if ($scope['type'] === 'dept') {
+        $whereEmployee = "AND a.employee_id IN (SELECT id FROM employees WHERE departamento = :scope_depto)";
+        $params[":scope_depto"] = $scope['id'];
+    } elseif ($scope['type'] === 'own') {
+        $whereEmployee = "AND a.employee_id = :scope_eid";
+        $params[":scope_eid"] = $scope['id'];
+    } elseif ($scope['type'] === 'none') {
+        $whereEmployee = "AND 1=0";
+    }
     if ($employeeId > 0) {
-        $whereEmployee = "AND a.employee_id = :emp_id";
+        $whereEmployee .= " AND a.employee_id = :emp_id";
         $params[":emp_id"] = $employeeId;
     }
 
@@ -340,7 +419,16 @@ function handleExport(PDO $db): void
 
     $output = fopen("php://output", "w");
     fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
-    fputcsv($output, ["Fecha", "Nombre", "Apellidos", "Puesto", "Departamento", "Entrada", "Salida", "Jornada", "Horas", "Extra", "Estatus", "Justificación", "IP"]);
+
+    $csvCell = function (mixed $value): string {
+        $value = trim((string)$value);
+        if ($value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"])) {
+            return "'" . $value;
+        }
+        return $value;
+    };
+
+    fputcsv($output, ["Fecha", "Nombre", "Apellidos", "Puesto", "Departamento", "Entrada", "Salida", "Jornada", "Horas", "Extra", "Estatus", "JustificaciÃ³n", "IP"]);
 
     $lateThresholdExp = defined("LATE_THRESHOLD") ? LATE_THRESHOLD : "09:05";
     $jornadaHorasExp = defined("JORNADA_HORAS") ? JORNADA_HORAS : 8;
@@ -348,19 +436,19 @@ function handleExport(PDO $db): void
         $status = computeAttendanceStatus($r["hora_entrada"], $r["hora_salida"], $lateThresholdExp, $jornadaHorasExp);
         $estadoTexto = $r["estatus"] === "justificado" ? "Justificado" : $status["estado"];
         fputcsv($output, [
-            $r["fecha"],
-            $r["nombre"],
-            trim($r["apellido_paterno"] . " " . $r["apellido_materno"]),
-            $r["puesto"],
-            $r["departamento"],
-            $r["hora_entrada"] ? date("H:i:s", strtotime($r["hora_entrada"])) : "",
-            $r["hora_salida"] ? date("H:i:s", strtotime($r["hora_salida"])) : "",
-            $status["jornada"],
-            $status["horas_totales"],
-            $status["horas_extra"],
-            $estadoTexto,
-            $r["justificacion"] ?? "",
-            $r["ip_address"] ?? "",
+            $csvCell($r["fecha"]),
+            $csvCell($r["nombre"]),
+            $csvCell(trim($r["apellido_paterno"] . " " . $r["apellido_materno"])),
+            $csvCell($r["puesto"]),
+            $csvCell($r["departamento"]),
+            $csvCell($r["hora_entrada"] ? date("H:i:s", strtotime($r["hora_entrada"])) : ""),
+            $csvCell($r["hora_salida"] ? date("H:i:s", strtotime($r["hora_salida"])) : ""),
+            $csvCell($status["jornada"]),
+            $csvCell($status["horas_totales"]),
+            $csvCell($status["horas_extra"]),
+            $csvCell($estadoTexto),
+            $csvCell($r["justificacion"] ?? ""),
+            $csvCell($r["ip_address"] ?? ""),
         ]);
     }
     fclose($output);
@@ -373,7 +461,7 @@ function handleCorrect(PDO $db): void
 
     if ($_SERVER["REQUEST_METHOD"] !== "POST") {
         http_response_code(405);
-        echo json_encode(["success" => false, "message" => "Método no permitido."]);
+        echo json_encode(["success" => false, "message" => "MÃ©todo no permitido."]);
         return;
     }
 
@@ -381,7 +469,7 @@ function handleCorrect(PDO $db): void
     $csrfToken = $input["csrf_token"] ?? "";
     if (!verifyCSRFToken($csrfToken)) {
         http_response_code(403);
-        echo json_encode(["success" => false, "message" => "Token de seguridad inválido."]);
+        echo json_encode(["success" => false, "message" => "Token de seguridad invÃ¡lido."]);
         return;
     }
 
@@ -399,7 +487,7 @@ function handleCorrect(PDO $db): void
 
     if ($id <= 0 || !isset($columnMap[$campo]) || $motivo === "") {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Datos inválidos. Motivo requerido."]);
+        echo json_encode(["success" => false, "message" => "Datos invÃ¡lidos. Motivo requerido."]);
         return;
     }
 
@@ -415,25 +503,34 @@ function handleCorrect(PDO $db): void
 
     $valorAnterior = $log[$campo] ?? "";
 
+    $valorGuardar = $valorNuevo;
+    $skipGenericUpdate = false;
+
     if (in_array($campo, ["hora_entrada", "hora_salida"], true)) {
-        if ($valorNuevo !== "" && !preg_match('/^\d{2}:\d{2}:\d{2}$/', $valorNuevo)) {
-            http_response_code(400);
-            echo json_encode(["success" => false, "message" => "Formato de hora inválido (use HH:mm:ss)."]);
-            return;
-        }
         if ($campo === "hora_salida" && $valorNuevo === "") {
             $db->prepare("UPDATE attendance_logs SET hora_salida = NULL, estatus = 'incidencia' WHERE id = :id")->execute([":id" => $id]);
+            $skipGenericUpdate = true;
+        } else {
+            if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $valorNuevo)) {
+                $valorGuardar = $log["fecha"] . " " . $valorNuevo;
+            } elseif (!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $valorNuevo)) {
+                http_response_code(400);
+                echo json_encode(["success" => false, "message" => "Formato de hora invÃ¡lido (use HH:mm:ss)."]);
+                return;
+            }
         }
     } elseif ($campo === "estatus" && $valorNuevo !== "" && !in_array($valorNuevo, ["regular", "justificado", "incidencia"], true)) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Estatus inválido. Use: regular, justificado o incidencia."]);
+        echo json_encode(["success" => false, "message" => "Estatus invÃ¡lido. Use: regular, justificado o incidencia."]);
         return;
     }
 
     $column = $columnMap[$campo];
-    $sql = "UPDATE attendance_logs SET `$column` = :valor WHERE id = :id";
-    $stmtU = $db->prepare($sql);
-    $stmtU->execute([":valor" => $valorNuevo, ":id" => $id]);
+    if (!$skipGenericUpdate) {
+        $sql = "UPDATE attendance_logs SET `$column` = :valor WHERE id = :id";
+        $stmtU = $db->prepare($sql);
+        $stmtU->execute([":valor" => $valorGuardar, ":id" => $id]);
+    }
 
     $stmtC = $db->prepare("INSERT INTO attendance_corrections (attendance_log_id, user_id, campo_modificado, valor_anterior, valor_nuevo, motivo) VALUES (:log_id, :uid, :campo, :anterior, :nuevo, :motivo)");
     $stmtC->execute([
@@ -445,7 +542,7 @@ function handleCorrect(PDO $db): void
         ":motivo" => $motivo,
     ]);
 
-    logAudit("correct_attendance", "attendance", $id, "Corregido $campo: '$valorAnterior' → '$valorNuevo'. Motivo: $motivo");
+    logAudit("correct_attendance", "attendance", $id, "Corregido $campo: '$valorAnterior' â†’ '$valorNuevo'. Motivo: $motivo");
     echo json_encode(["success" => true, "message" => "Registro corregido exitosamente."]);
 }
 

@@ -25,7 +25,17 @@ try {
             $params = [];
             $where = 'WHERE 1=1';
             if ($employeeId > 0) { $where = 'WHERE pe.employee_id = :eid'; $params[':eid'] = $employeeId; }
-            $stmtC = $db->prepare("SELECT COUNT(*) FROM performance_evaluations pe $where");
+            $scope = resolveEmployeeScope($db);
+            if ($scope['type'] === 'own') {
+                $where .= ($employeeId > 0 ? ' AND' : ' WHERE') . ' pe.employee_id = :scope_eid';
+                $params[':scope_eid'] = $scope['id'];
+            } elseif ($scope['type'] === 'dept') {
+                $where .= ($employeeId > 0 ? ' AND' : ' WHERE') . ' e.departamento = :scope_depto';
+                $params[':scope_depto'] = $scope['id'];
+            } elseif ($scope['type'] === 'none') {
+                $where .= ' AND 1=0';
+            }
+            $stmtC = $db->prepare("SELECT COUNT(*) FROM performance_evaluations pe INNER JOIN employees e ON e.id = pe.employee_id $where");
             $stmtC->execute($params);
             $total = (int)$stmtC->fetchColumn();
             $stmt = $db->prepare("SELECT pe.*, e.nombre, e.apellido_paterno, u.username AS evaluador_nombre FROM performance_evaluations pe INNER JOIN employees e ON e.id = pe.employee_id INNER JOIN users u ON u.id = pe.evaluador $where ORDER BY pe.created_at DESC LIMIT $porPagina OFFSET $offset");
@@ -44,7 +54,17 @@ try {
             $params = [];
             $where = 'WHERE 1=1';
             if ($employeeId > 0) { $where = 'WHERE th.employee_id = :eid'; $params[':eid'] = $employeeId; }
-            $stmtC = $db->prepare("SELECT COUNT(*) FROM training_history th $where");
+            $scope = resolveEmployeeScope($db);
+            if ($scope['type'] === 'own') {
+                $where .= ($employeeId > 0 ? ' AND' : ' WHERE') . ' th.employee_id = :scope_eid';
+                $params[':scope_eid'] = $scope['id'];
+            } elseif ($scope['type'] === 'dept') {
+                $where .= ($employeeId > 0 ? ' AND' : ' WHERE') . ' e.departamento = :scope_depto';
+                $params[':scope_depto'] = $scope['id'];
+            } elseif ($scope['type'] === 'none') {
+                $where .= ' AND 1=0';
+            }
+            $stmtC = $db->prepare("SELECT COUNT(*) FROM training_history th INNER JOIN employees e ON e.id = th.employee_id $where");
             $stmtC->execute($params);
             $total = (int)$stmtC->fetchColumn();
             $stmt = $db->prepare("SELECT th.*, e.nombre, e.apellido_paterno, tc.nombre AS curso_nombre, tc.tipo AS curso_tipo FROM training_history th INNER JOIN employees e ON e.id = th.employee_id INNER JOIN training_courses tc ON tc.id = th.course_id $where ORDER BY th.created_at DESC LIMIT $porPagina OFFSET $offset");

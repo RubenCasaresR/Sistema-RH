@@ -2,6 +2,23 @@
 
 define('TAX_YEAR', 2025);
 
+/**
+ * Cuenta los días laborables (lunes a viernes) dentro de un rango de fechas.
+ */
+function countWeekdays(string $inicio, string $fin): int
+{
+    $inicio = new DateTime($inicio);
+    $fin = new DateTime($fin);
+    if ($inicio > $fin) return 0;
+    $dias = 0;
+    while ($inicio <= $fin) {
+        $wd = (int)$inicio->format('N');
+        if ($wd <= 5) $dias++;
+        $inicio->modify('+1 day');
+    }
+    return $dias;
+}
+
 function getISRTariff(int $year = TAX_YEAR, string $tipo = 'mensual'): array
 {
     $db = getDB();
@@ -12,7 +29,19 @@ function getISRTariff(int $year = TAX_YEAR, string $tipo = 'mensual'): array
         ORDER BY limite_inferior ASC
     ");
     $stmt->execute([':year' => $year, ':tipo' => $tipo]);
-    return $stmt->fetchAll();
+    $rows = $stmt->fetchAll();
+
+    if (empty($rows)) {
+        $stmtYear = $db->prepare("SELECT MAX(ejercicio) AS max_year FROM tax_isr_tariff WHERE tipo = :tipo");
+        $stmtYear->execute([':tipo' => $tipo]);
+        $maxYear = (int)$stmtYear->fetchColumn();
+        if ($maxYear > 0 && $maxYear !== $year) {
+            error_log("Tarifa ISR $year no encontrada, usando $maxYear como respaldo.");
+            return getISRTariff($maxYear, $tipo);
+        }
+    }
+
+    return $rows;
 }
 
 function getUMA(int $year = TAX_YEAR): array
@@ -22,6 +51,12 @@ function getUMA(int $year = TAX_YEAR): array
     $stmt->execute([':year' => $year]);
     $uma = $stmt->fetch();
     if (!$uma) {
+        $stmtMax = $db->query("SELECT MAX(ejercicio) AS max_year FROM tax_uma");
+        $maxYear = (int)$stmtMax->fetchColumn();
+        if ($maxYear > 0 && $maxYear !== $year) {
+            error_log("UMA $year no encontrada, usando $maxYear como respaldo.");
+            return getUMA($maxYear);
+        }
         return ['valor_diario' => 113.14, 'valor_mensual' => 3438.80];
     }
     return $uma;
@@ -29,6 +64,8 @@ function getUMA(int $year = TAX_YEAR): array
 
 function calculateISR(float $ingresoGravable, int $year = TAX_YEAR, string $tipo = 'mensual'): float
 {
+    if ($ingresoGravable <= 0.001) return 0;
+
     $tarifa = getISRTariff($year, $tipo);
     if (empty($tarifa)) return 0;
 
@@ -116,11 +153,6 @@ function calculateAguinaldoProporcional(
     $fin = new DateTime($periodoFin);
     $diasDelPeriodo = (int)$fin->diff($inicio)->days + 1;
 
-    $ingreso = new DateTime($fechaIngreso);
-    $hoy = new DateTime();
-    $diasTrabajadosAnio = min(365, (int)$hoy->diff($ingreso)->days);
-    $diasTrabajadosAnio = max(1, $diasTrabajadosAnio);
-
     $aguinaldoAnual = $salarioDiario * $diasAguinaldo;
     $aguinaldoDiario = $aguinaldoAnual / 365;
     $aguinaldoPeriodo = $aguinaldoDiario * $diasDelPeriodo;
@@ -134,13 +166,19 @@ function calculatePrimaVacacionalProporcional(
     string $periodoInicio,
     string $periodoFin
 ): float {
+    $fin = new DateTime($periodoFin);
     $ingreso = new DateTime($fechaIngreso);
-    $hoy = new DateTime();
-    $anios = (int)$ingreso->diff($hoy)->y;
-    $diasVacaciones = getVacationDays(max(1, $anios));
+
+    // Antigüedad calculada al cierre del período (determinista, no depende de "hoy")
+    if ($ingreso > $fin) {
+        $anios = 0;
+    } else {
+        $diff = $ingreso->diff($fin);
+        $anios = (int)$diff->y;
+    }
+    $diasVacaciones = getVacationDays(max(0, $anios));
 
     $inicio = new DateTime($periodoInicio);
-    $fin = new DateTime($periodoFin);
     $diasDelPeriodo = (int)$fin->diff($inicio)->days + 1;
 
     $primaVacacionalAnual = ($diasVacaciones * $salarioDiario) * 0.25;
@@ -181,9 +219,13 @@ function calculatePayrollForEmployee(
     $salarioBase = (float)$employee['salario_base'];
     $salarioDiario = $salarioBase / 30;
     $diasDelPeriodo = max(1, $diasDelPeriodo);
+    $factorPeriodo = $tipoPeriodo === 'quincenal' ? 2 : 1;
 
     $db = getDB();
     $eid = (int)$employee['id'];
+
+    // Ejercicio fiscal del período (determinista; no se congela en TAX_YEAR)
+    $anioPeriodo = (int)(new DateTime($periodoFin))->format('Y');
 
     // Determinar el inicio real considerando la fecha de ingreso del empleado
     $inicioReal = $periodoInicio;
@@ -195,38 +237,42 @@ function calculatePayrollForEmployee(
         $diasDelPeriodoReal = max(1, (new DateTime($periodoFin))->diff(new DateTime($inicioReal))->days + 1);
     }
 
+    // Días laborables (lun-vie) del período completo y del tramo efectivamente cubierto
+    $diasLaborablesTotales = max(1, countWeekdays($periodoInicio, $periodoFin));
+    $diasLaborablesReales = max(1, countWeekdays($inicioReal, $periodoFin));
+
+    $umbralRetardo = defined('LATE_THRESHOLD') ? LATE_THRESHOLD : '09:05';
+
     $stmtA = $db->prepare("
         SELECT
             COUNT(*) AS total_dias,
-            SUM(CASE WHEN hora_entrada IS NULL THEN 1 ELSE 0 END) AS faltas_con_registro,
             SUM(CASE WHEN hora_entrada IS NOT NULL AND hora_salida IS NOT NULL THEN 1 ELSE 0 END) AS dias_completos,
-            SUM(CASE WHEN hora_entrada IS NOT NULL AND HOUR(hora_entrada) >= 9 AND MINUTE(hora_entrada) > 5 THEN 1 ELSE 0 END) AS retardos,
+            SUM(CASE WHEN hora_entrada IS NOT NULL AND TIME(hora_entrada) > :umbral THEN 1 ELSE 0 END) AS retardos,
             SUM(CASE WHEN hora_entrada IS NOT NULL AND hora_salida IS NOT NULL
-                THEN TIMESTAMPDIFF(HOUR, hora_entrada, hora_salida) - 8 ELSE 0 END) AS horas_extra
+                THEN TIMESTAMPDIFF(MINUTE, hora_entrada, hora_salida) - 480 ELSE 0 END) AS minutos_extra
         FROM attendance_logs
         WHERE employee_id = :eid
           AND fecha BETWEEN :inicio AND :fin
           AND tipo = 'regular'
     ");
-    $stmtA->execute([':eid' => $eid, ':inicio' => $inicioReal, ':fin' => $periodoFin]);
+    $stmtA->execute([':eid' => $eid, ':inicio' => $inicioReal, ':fin' => $periodoFin, ':umbral' => $umbralRetardo]);
     $asis = $stmtA->fetch();
 
     $diasConRegistro = (int)($asis['total_dias'] ?? 0);
-    $faltasConRegistro = max(0, (int)($asis['faltas_con_registro'] ?? 0));
     $diasCompletos = max(0, (int)($asis['dias_completos'] ?? 0));
     $retardos = max(0, (int)($asis['retardos'] ?? 0));
-    $horasExtra = max(0, (int)($asis['horas_extra'] ?? 0));
+    $minutosExtra = max(0, (int)($asis['minutos_extra'] ?? 0));
+    $horasExtra = round($minutosExtra / 60, 2);
 
-    // Días sin ningún registro en el checador se consideran faltas
-    $faltas = max(0, $diasDelPeriodoReal - $diasConRegistro + $faltasConRegistro);
-
-    // Ajustes manuales
+    // Ajustes manuales (faltas, retardos, horas extra, percepciones y deducciones)
+    $percepcionesAdicionales = 0;
+    $deduccionesAdicionales = 0;
     if ($periodId > 0) {
         $adjustments = getPayrollAdjustments($periodId, $eid);
         foreach ($adjustments as $adj) {
             switch ($adj['tipo']) {
                 case 'falta':
-                    $faltas += (int)$adj['monto'];
+                    $faltasManual = (int)$adj['monto'];
                     break;
                 case 'retardo':
                     $retardos += (int)$adj['monto'];
@@ -234,14 +280,26 @@ function calculatePayrollForEmployee(
                 case 'hora_extra':
                     $horasExtra += (int)$adj['monto'];
                     break;
+                case 'percepcion':
+                    $percepcionesAdicionales += (float)$adj['monto'];
+                    break;
+                case 'deduccion':
+                    $deduccionesAdicionales += (float)$adj['monto'];
+                    break;
             }
         }
     }
 
+    // Faltas: días laborables sin ningún registro de checador (fines de semana no cuentan)
+    $faltas = max(0, $diasLaborablesReales - $diasConRegistro);
+    if (isset($faltasManual)) $faltas += $faltasManual;
+    $faltas = max(0, min($faltas, $diasLaborablesReales));
+
     $descuentoRetardos = calculateRetardoDeduction($retardos);
 
-    $diasTrabajados = max(0, $diasCompletos);
-    $salarioPeriodo = $salarioDiario * $diasTrabajados;
+    // Días efectivamente trabajados y salario del período proporcional
+    $diasTrabajados = $diasLaborablesReales - $faltas;
+    $salarioPeriodo = ($salarioBase / $factorPeriodo) * ($diasTrabajados / $diasLaborablesTotales);
     $descuentoFaltas = 0;
 
     // Horas extra: dobles (primeras 9) y triples (subsecuentes)
@@ -264,31 +322,24 @@ function calculatePayrollForEmployee(
         }
     }
 
-    $percepciones = $salarioPeriodo + $pagoHorasExtra + $aguinaldoProp + $primaVacProp + $totalBonos;
-    $ingresoGravable = $salarioBase / ($tipoPeriodo === 'quincenal' ? 2 : 1) + $pagoHorasExtra + $aguinaldoProp + $primaVacProp + $totalBonos;
+    $percepciones = $salarioPeriodo + $pagoHorasExtra + $aguinaldoProp + $primaVacProp + $totalBonos + $percepcionesAdicionales;
 
-    // ISR neto con subsidio al empleo
-    $isrCalc = calculateISRNeto($ingresoGravable, TAX_YEAR, $tipoPeriodo);
+    // Base gravable: sobre lo efectivamente devengado (no sobre el salario base completo)
+    $ingresoGravable = $salarioPeriodo + $pagoHorasExtra + $aguinaldoProp + $primaVacProp + $totalBonos + $percepcionesAdicionales;
+
+    // ISR neto con subsidio al empleo (ejercicio del período)
+    $isrCalc = calculateISRNeto($ingresoGravable, $anioPeriodo, $tipoPeriodo);
     $isr = $isrCalc['isr_neto'];
     $subsidio = $isrCalc['subsidio'];
 
-    $imss = calculateIMSSObrero($salarioDiario, $diasDelPeriodo);
-
-    // Deducciones manuales
-    $deduccionesAdicionales = 0;
-    $percepcionesAdicionales = 0;
-    if ($periodId > 0) {
-        $adjustments = getPayrollAdjustments($periodId, $eid);
-        foreach ($adjustments as $adj) {
-            if ($adj['tipo'] === 'percepcion') {
-                $percepcionesAdicionales += (float)$adj['monto'];
-            } elseif ($adj['tipo'] === 'deduccion') {
-                $deduccionesAdicionales += (float)$adj['monto'];
-            }
-        }
+    // Subsidio al empleo que excede el ISR: se paga al trabajador (LISR)
+    $subsidioCompensable = round(max(0, $subsidio - $isrCalc['isr']), 2);
+    if ($subsidioCompensable > 0) {
+        $percepciones += $subsidioCompensable;
     }
 
-    $percepciones += $percepcionesAdicionales;
+    $imss = calculateIMSSObrero($salarioDiario, $diasLaborablesReales, $anioPeriodo);
+
     $deducciones = $isr + $imss + $descuentoRetardos + $deduccionesAdicionales;
     $sueldoNeto = round(max(0, $percepciones - $deducciones), 2);
     $totalIncidencias = round($descuentoRetardos - $pagoHorasExtra, 2);
@@ -296,6 +347,8 @@ function calculatePayrollForEmployee(
     return [
         'salario_base'          => $salarioBase,
         'salario_diario'        => round($salarioDiario, 2),
+        'salario_periodo'       => round($salarioPeriodo, 2),
+        'dias_laborables'       => $diasLaborablesReales,
         'dias_trabajados'       => $diasTrabajados,
         'dias_del_periodo'      => $diasDelPeriodo,
         'faltas'                => $faltas,
@@ -310,6 +363,7 @@ function calculatePayrollForEmployee(
         'prima_vacacional'      => $primaVacProp,
         'percepciones_adicionales' => $percepcionesAdicionales,
         'deducciones_adicionales'  => $deduccionesAdicionales,
+        'subsidio_compensable'  => $subsidioCompensable,
         'percepciones_total'    => round($percepciones, 2),
         'isr_retener'           => $isr,
         'isr_bruto'             => $isrCalc['isr'],

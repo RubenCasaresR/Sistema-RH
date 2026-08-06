@@ -23,6 +23,17 @@ $perPage = 20;
 $params = [];
 $where = 'WHERE 1=1';
 
+$scope = resolveEmployeeScope($db);
+if ($scope['type'] === 'own') {
+    $where .= ' AND e.id = :scope_eid';
+    $params[':scope_eid'] = $scope['id'];
+} elseif ($scope['type'] === 'dept') {
+    $where .= ' AND e.departamento = :scope_depto';
+    $params[':scope_depto'] = $scope['id'];
+} elseif ($scope['type'] === 'none') {
+    $where .= ' AND 1=0';
+}
+
 if ($employeeId > 0) {
     $where .= ' AND d.employee_id = :emp_id';
     $params[':emp_id'] = $employeeId;
@@ -57,7 +68,9 @@ if ($page > $totalPages) $page = $totalPages;
 $offset = ($page - 1) * $perPage;
 
 $stmt = $db->prepare("
-    SELECT d.*, e.nombre, e.apellido_paterno, e.apellido_materno,
+    SELECT d.id, d.employee_id, d.tipo_documento, d.nombre_original, d.mime_type,
+           d.peso_bytes, d.hash_firma, d.fecha_firma, d.created_at,
+           e.nombre, e.apellido_paterno, e.apellido_materno,
            (SELECT COUNT(*) FROM document_versions WHERE document_id = d.id) as version_count
     FROM employee_documents d
     INNER JOIN employees e ON e.id = d.employee_id
@@ -71,7 +84,18 @@ foreach ($params as $k => $v) $stmt->bindValue($k, $v);
 $stmt->execute();
 $docs = $stmt->fetchAll();
 
-$emps = $db->query("SELECT id, nombre, apellido_paterno, apellido_materno FROM employees WHERE activo = 1 ORDER BY apellido_paterno")->fetchAll();
+$scope = resolveEmployeeScope($db);
+if ($scope['type'] === 'own') {
+    $stmtEmps = $db->prepare("SELECT id, nombre, apellido_paterno, apellido_materno FROM employees WHERE activo = 1 AND id = :eid ORDER BY apellido_paterno");
+    $stmtEmps->execute([':eid' => $scope['id']]);
+    $emps = $stmtEmps->fetchAll();
+} elseif ($scope['type'] === 'dept') {
+    $stmtEmps = $db->prepare("SELECT id, nombre, apellido_paterno, apellido_materno FROM employees WHERE activo = 1 AND departamento = :depto ORDER BY apellido_paterno");
+    $stmtEmps->execute([':depto' => $scope['id']]);
+    $emps = $stmtEmps->fetchAll();
+} else {
+    $emps = $db->query("SELECT id, nombre, apellido_paterno, apellido_materno FROM employees WHERE activo = 1 ORDER BY apellido_paterno")->fetchAll();
+}
 $tiposDoc = $db->query("SELECT DISTINCT tipo_documento FROM employee_documents ORDER BY tipo_documento")->fetchAll(PDO::FETCH_COLUMN);
 ?>
 
@@ -255,6 +279,15 @@ function getToken() {
     return document.querySelector('meta[name="csrf-token"]')?.content || '';
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function previewDoc(el) {
     const id = el.dataset.id;
     const csrf = getToken();
@@ -266,7 +299,7 @@ function previewDoc(el) {
     container.innerHTML = '<p class="empty-state">Cargando...</p>';
     downloadBtn.href = '#';
 
-    fetch(`${APP_URL}/api/files.php?id=${id}&token=${csrf}&preview=1`)
+    fetch(`${APP_URL}/api/files.php?id=${id}&preview=1`, { headers: { 'X-CSRF-Token': csrf } })
         .then(res => {
             const contentType = res.headers.get('Content-Type') || '';
             const disposition = res.headers.get('Content-Disposition') || '';
@@ -278,12 +311,16 @@ function previewDoc(el) {
             }
 
             title.textContent = filename;
-            downloadBtn.href = `${APP_URL}/api/files.php?id=${id}&token=${csrf}`;
+            downloadBtn.href = '#';
+            downloadBtn.onclick = function() {
+                downloadFile('${APP_URL}/api/files.php?id=${id}');
+                return false;
+            };
 
             if (contentType.startsWith('image/')) {
                 res.blob().then(blob => {
                     const url = URL.createObjectURL(blob);
-                    container.innerHTML = `<img src="${url}" style="max-width:100%;max-height:70vh;object-fit:contain;" alt="${filename}">`;
+                    container.innerHTML = `<img src="${url}" style="max-width:100%;max-height:70vh;object-fit:contain;" alt="${escapeHtml(filename)}">`;
                 });
             } else if (contentType === 'application/pdf') {
                 res.blob().then(blob => {
@@ -324,15 +361,14 @@ function showVersions(el) {
             const pesoCurrent = current.peso_bytes > 1048576
                 ? (current.peso_bytes / 1048576).toFixed(2) + ' MB'
                 : (current.peso_bytes / 1024).toFixed(1) + ' KB';
-            const token = getToken();
             html += `<tr style="font-weight:bold;">
                 <td><span class="badge badge-success">Actual</span></td>
-                <td>${current.nombre_original}</td>
+                <td>${escapeHtml(current.nombre_original)}</td>
                 <td>${pesoCurrent}</td>
                 <td>${current.hash_firma ? '<span class="badge badge-success">Firmado</span>' : '<span class="badge badge-secondary">Sin firma</span>'}</td>
                 <td>—</td>
-                <td>${current.created_at}</td>
-                <td><a href="#" onclick="window.open('${APP_URL}/api/files.php?id=${id}&token=${token}', '_blank');return false;">Descargar</a></td>
+                <td>${escapeHtml(current.created_at)}</td>
+                <td><a href="#" onclick="downloadFile('${APP_URL}/api/files.php?id=${id}');return false;">Descargar</a></td>
             </tr>`;
 
             versions.forEach(v => {
@@ -341,13 +377,13 @@ function showVersions(el) {
                     : (v.peso_bytes / 1024).toFixed(1) + ' KB';
                 const subido = v.username || v.subido_por || '—';
                 html += `<tr>
-                    <td>v${v.version_number}</td>
-                    <td>${v.nombre_original}</td>
+                    <td>v${escapeHtml(v.version_number)}</td>
+                    <td>${escapeHtml(v.nombre_original)}</td>
                     <td>${peso}</td>
                     <td>${v.hash_firma ? '<span class="badge badge-success">Firmado</span>' : '<span class="badge badge-secondary">Sin firma</span>'}</td>
-                    <td>${subido}</td>
-                    <td>${v.created_at}</td>
-                    <td><a href="#" onclick="window.open('${APP_URL}/api/files.php?id=${id}&token=${token}&version=${v.id}', '_blank');return false;">Descargar</a></td>
+                    <td>${escapeHtml(subido)}</td>
+                    <td>${escapeHtml(v.created_at)}</td>
+                    <td><a href="#" onclick="downloadFile('${APP_URL}/api/files.php?id=${id}&version=${v.id}');return false;">Descargar</a></td>
                 </tr>`;
             });
 

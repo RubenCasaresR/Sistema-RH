@@ -1,8 +1,24 @@
 <?php
 
+$vendorAutoload = __DIR__ . '/../vendor/autoload.php';
+if (file_exists($vendorAutoload)) {
+    require_once $vendorAutoload;
+}
+
 function hashPassword(string $password): string
 {
     return password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+}
+
+/**
+ * Valida la política de contraseñas. Retorna mensaje de error o null si es válida.
+ */
+function validatePasswordPolicy(string $password): ?string
+{
+    if (strlen($password) < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+    if (!preg_match('/[A-Z]/', $password)) return 'La contraseña debe contener al menos una mayúscula.';
+    if (!preg_match('/[0-9]/', $password)) return 'La contraseña debe contener al menos un número.';
+    return null;
 }
 
 function h(?string $value): string
@@ -107,14 +123,52 @@ function verifyCSRFToken(string $token): bool
 
 function getClientIP(): string
 {
-    $headers = ['HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_CLIENT_IP', 'REMOTE_ADDR'];
-    foreach ($headers as $h) {
-        if (!empty($_SERVER[$h])) {
-            $ip = explode(',', $_SERVER[$h])[0];
-            if (filter_var(trim($ip), FILTER_VALIDATE_IP)) return trim($ip);
-        }
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    if (filter_var($ip, FILTER_VALIDATE_IP)) {
+        return $ip;
     }
-    return $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    return '127.0.0.1';
+}
+
+/**
+ * ID del empleado vinculado al usuario en sesión, o null si no hay vínculo.
+ */
+function currentEmployeeId(PDO $db): ?int
+{
+    if (empty($_SESSION['user_id'])) return null;
+    $stmt = $db->prepare("SELECT id FROM employees WHERE user_id = :uid AND activo = 1 LIMIT 1");
+    $stmt->execute([':uid' => (int)$_SESSION['user_id']]);
+    $id = $stmt->fetchColumn();
+    return $id !== false ? (int)$id : null;
+}
+
+/**
+ * Alcance de datos del empleado para el usuario en sesión.
+ *  - 'all':  accede a toda la plantilla (Administrador RH, Gerente RH, Dirección)
+ *  - 'dept': solo su departamento (Jefe de área) — 'id' es el departamento
+ *  - 'own':  solo su propio registro — 'id' es el employee_id
+ *  - 'none': sin acceso
+ */
+function resolveEmployeeScope(PDO $db): array
+{
+    $role = $_SESSION['user']['role_name'] ?? '';
+    if (in_array($role, ['Administrador RH', 'Gerente RH', 'Dirección'], true)) {
+        return ['type' => 'all', 'id' => null];
+    }
+
+    $eid = currentEmployeeId($db);
+
+    if ($role === 'Jefe de área') {
+        if ($eid === null) return ['type' => 'none', 'id' => null];
+        $stmt = $db->prepare("SELECT departamento FROM employees WHERE id = :id LIMIT 1");
+        $stmt->execute([':id' => $eid]);
+        $depto = $stmt->fetchColumn();
+        if ($depto) return ['type' => 'dept', 'id' => $depto];
+        return ['type' => 'none', 'id' => null];
+    }
+
+    if ($eid !== null) return ['type' => 'own', 'id' => $eid];
+    return ['type' => 'none', 'id' => null];
 }
 
 function checkLoginAttempts(string $username): bool
@@ -124,11 +178,18 @@ function checkLoginAttempts(string $username): bool
     $window = date('Y-m-d H:i:s', strtotime('-15 minutes'));
     $stmt = $db->prepare("
         SELECT COUNT(*) FROM login_attempts
-        WHERE (username = :username OR ip_address = :ip)
+        WHERE username = :username AND ip_address = :ip
           AND attempted_at >= :window
     ");
     $stmt->execute([':username' => $username, ':ip' => $ip, ':window' => $window]);
-    return (int)$stmt->fetchColumn() < 5;
+    if ((int)$stmt->fetchColumn() >= 5) return false;
+
+    $stmtGlobal = $db->prepare("
+        SELECT COUNT(*) FROM login_attempts
+        WHERE username = :username AND attempted_at >= :window
+    ");
+    $stmtGlobal->execute([':username' => $username, ':window' => $window]);
+    return (int)$stmtGlobal->fetchColumn() < 20;
 }
 
 function recordLoginAttempt(string $username): void
@@ -174,16 +235,48 @@ function getClientTimezoneOffset(): string
     return $_COOKIE['tz_offset'] ?? 'America/Mexico_City';
 }
 /**
- * Envía un correo electrónico simple.
+ * Envía un correo electrónico.
+ * Usa SMTP (PHPMailer) si SMTP_HOST está configurado; de lo contrario usa mail() nativo.
  * Retorna true si se envió, false si falló.
  */
 function sendEmail(string $to, string $subject, string $body): bool
 {
-    $headers = "MIME-Version: 1.0\r\n";
-    $headers .= "Content-Type: text/html; charset=utf-8\r\n";
-    $headers .= "From: " . (defined('MAIL_FROM') ? MAIL_FROM : 'noreply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost')) . "\r\n";
-    $headers .= "X-Mailer: PHP/" . PHP_VERSION . "\r\n";
+    $fromName = defined('APP_NAME') ? APP_NAME : 'Sistema RH';
+    $from = defined('MAIL_FROM') ? MAIL_FROM : 'noreply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+
+    $smtpHost = env('SMTP_HOST', '');
+    $smtpPort = (int)env('SMTP_PORT', 587);
+    $smtpUser = env('SMTP_USER', '');
+    $smtpPass = env('SMTP_PASS', '');
+    $smtpEncryption = env('SMTP_ENCRYPTION', 'tls');
+
     try {
+        if ($smtpHost !== '' && class_exists(\PHPMailer\PHPMailer\PHPMailer::class)) {
+            $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host = $smtpHost;
+            $mail->SMTPAuth = $smtpUser !== '';
+            if ($mail->SMTPAuth) {
+                $mail->Username = $smtpUser;
+                $mail->Password = $smtpPass;
+            }
+            $mail->Port = $smtpPort;
+            if ($smtpEncryption !== '' && strtolower($smtpEncryption) !== 'none') {
+                $mail->SMTPSecure = $smtpEncryption;
+            }
+            $mail->CharSet = 'UTF-8';
+            $mail->setFrom($smtpUser !== '' ? $smtpUser : $from, $fromName);
+            $mail->addAddress($to);
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body = $body;
+            return $mail->send();
+        }
+
+        $headers = "MIME-Version: 1.0\r\n";
+        $headers .= "Content-Type: text/html; charset=utf-8\r\n";
+        $headers .= "From: " . $from . "\r\n";
+        $headers .= "X-Mailer: PHP/" . PHP_VERSION . "\r\n";
         return mail($to, $subject, $body, $headers);
     } catch (\Throwable $e) {
         error_log("sendEmail failed: " . $e->getMessage());

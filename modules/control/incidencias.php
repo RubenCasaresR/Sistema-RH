@@ -128,8 +128,8 @@ require_once __DIR__ . '/../../includes/header.php';
                             <td><?= formatDate($inc['fecha']) ?></td>
                             <td class="incidencia-texto" title="<?= h($inc['personas_involucradas']) ?>"><?= h($inc['personas_involucradas']) ?></td>
                             <td><?= h($inc['area']) ?></td>
-                            <td><span class="badge-tipo badge-tipo-<?= $inc['tipo_incidencia'] ?>"><?= $tipoLabels[$inc['tipo_incidencia']] ?? $inc['tipo_incidencia'] ?></span></td>
-                            <td><span class="badge-resultado badge-resultado-<?= $inc['resultado'] ?>"><?= $resultadoLabels[$inc['resultado']] ?? $inc['resultado'] ?></span></td>
+                            <td><span class="badge-tipo badge-tipo-<?= h($inc['tipo_incidencia']) ?>"><?= h($tipoLabels[$inc['tipo_incidencia']] ?? $inc['tipo_incidencia']) ?></span></td>
+                            <td><span class="badge-resultado badge-resultado-<?= h($inc['resultado']) ?>"><?= h($resultadoLabels[$inc['resultado']] ?? $inc['resultado']) ?></span></td>
                             <td><?= h($inc['registrado_por_nombre']) ?></td>
                             <td class="actions-cell">
                                 <a href="<?= APP_URL ?>/modules/control/incidencia_view.php?id=<?= $inc['id'] ?>" class="btn btn-sm btn-ghost">Ver</a>

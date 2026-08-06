@@ -6,7 +6,7 @@ requireAuth();
 header('Content-Type: application/json; charset=utf-8');
 
 $id = (int)($_GET['id'] ?? 0);
-$token = $_GET['token'] ?? '';
+$token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
 $versionId = (int)($_GET['version'] ?? 0);
 
 if ($id <= 0 || !verifyCSRFToken($token)) {
@@ -30,9 +30,10 @@ try {
 if ($versionId > 0) {
     try {
         $stmt = $db->prepare("
-            SELECT dv.*, ed.employee_id
+            SELECT dv.*, ed.employee_id, e.departamento
             FROM document_versions dv
             INNER JOIN employee_documents ed ON ed.id = dv.document_id
+            INNER JOIN employees e ON e.id = ed.employee_id
             WHERE dv.id = :vid AND dv.document_id = :did
             LIMIT 1
         ");
@@ -51,6 +52,17 @@ if ($versionId > 0) {
         exit;
     }
 
+    $scope = resolveEmployeeScope($db);
+    if (
+        ($scope['type'] === 'own' && (int)$doc['employee_id'] !== $scope['id']) ||
+        ($scope['type'] === 'dept' && $doc['departamento'] !== $scope['id']) ||
+        $scope['type'] === 'none'
+    ) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'No tienes acceso a este documento.']);
+        exit;
+    }
+
     $filePath = __DIR__ . '/../' . $doc['archivo_ruta'];
     $originalName = $doc['nombre_original'];
     $mime = $doc['mime_type'];
@@ -60,6 +72,15 @@ if ($versionId > 0) {
         echo json_encode(['success' => false, 'message' => 'Archivo de versión no encontrado en el servidor.']);
         exit;
     }
+
+    $baseDir = realpath(__DIR__ . '/../uploads') ?: '';
+    $resolved = realpath($filePath);
+    if ($resolved === false || $baseDir === '' || strpos($resolved, $baseDir . DIRECTORY_SEPARATOR) !== 0) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Archivo no permitido.']);
+        exit;
+    }
+    $filePath = $resolved;
 
     $isPreview = isset($_GET['preview']) && $_GET['preview'] === '1';
     $disposition = $isPreview ? 'inline' : 'attachment';
@@ -80,7 +101,7 @@ if ($versionId > 0) {
 
 try {
     $stmt = $db->prepare("
-        SELECT ed.*, e.nombre, e.apellido_paterno
+        SELECT ed.*, e.nombre, e.apellido_paterno, e.departamento
         FROM employee_documents ed
         INNER JOIN employees e ON e.id = ed.employee_id
         WHERE ed.id = :id
@@ -101,6 +122,17 @@ if (!$doc) {
     exit;
 }
 
+$scope = resolveEmployeeScope($db);
+if (
+    ($scope['type'] === 'own' && (int)$doc['employee_id'] !== $scope['id']) ||
+    ($scope['type'] === 'dept' && $doc['departamento'] !== $scope['id']) ||
+    $scope['type'] === 'none'
+) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'No tienes acceso a este documento.']);
+    exit;
+}
+
 $filePath = __DIR__ . '/../' . $doc['archivo_ruta'];
 
 if (!file_exists($filePath)) {
@@ -108,6 +140,15 @@ if (!file_exists($filePath)) {
     echo json_encode(['success' => false, 'message' => 'Archivo no encontrado en el servidor.']);
     exit;
 }
+
+$baseDir = realpath(__DIR__ . '/../uploads') ?: '';
+$resolved = realpath($filePath);
+if ($resolved === false || $baseDir === '' || strpos($resolved, $baseDir . DIRECTORY_SEPARATOR) !== 0) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Archivo no permitido.']);
+    exit;
+}
+$filePath = $resolved;
 
 $mimeTypes = [
     'pdf' => 'application/pdf',

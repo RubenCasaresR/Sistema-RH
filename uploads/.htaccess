@@ -1,14 +1,19 @@
-# Denegar acceso directo a documentos sensibles
-# Las imágenes de perfil se permiten para mostrar en la interfaz
-<FilesMatch "\.(pdf|doc|docx|xls|xlsx|zip|rar|txt)$">
+# Deshabilitar ejecución de scripts PHP en uploads/ (defensa en profundidad)
+# En XAMPP (PHP como módulo Apache) esto desactiva el motor de PHP.
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+
+# Denegar acceso directo a extensiones sensibles y archivos ejecutables.
+# Los directorios documents/ y cvs/ se protegen con su propio .htaccess (Require all denied)
+# y sus archivos solo se sirven vía api/files.php y api/cv.php.
+<FilesMatch "\.(php|php3|php4|php5|php7|phtml|phar|pl|py|cgi|asp|aspx|jsp|sh)(\.|$)">
     Require all denied
 </FilesMatch>
 
-# Bloquear acceso a directorios específicos de documentos
-<IfModule mod_rewrite.c>
-    RewriteEngine On
-    # Solo redirigir a api/files.php para documentos, no para fotos
-    RewriteCond %{REQUEST_URI} ^/Sistema%20RH/uploads/documents/ [OR]
-    RewriteCond %{REQUEST_URI} ^/Sistema%20RH/uploads/cvs/
-    RewriteRule .* - [F]
-</IfModule>
+<FilesMatch "\.(pdf|doc|docx|xls|xlsx|zip|rar|txt)$">
+    Require all denied
+</FilesMatch>

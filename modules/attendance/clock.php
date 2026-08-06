@@ -35,6 +35,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
         if (!$emp) {
             $message = "Empleado no encontrado.";
             $messageType = "danger";
+        } elseif (!can("employees.read") && ($myEmployee === false || $empId !== (int)$myEmployee["id"])) {
+            $message = "Solo puedes registrar tu propia asistencia.";
+            $messageType = "danger";
         } else {
             $hoy = date("Y-m-d");
             $ahora = date("Y-m-d H:i:s");

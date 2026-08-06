@@ -28,8 +28,36 @@ try {
             break;
         case 'items':
             $periodId = (int)($_GET['period_id'] ?? 0);
-            $stmt = $db->prepare("SELECT pi.*, e.nombre, e.apellido_paterno, e.apellido_materno, e.puesto FROM payroll_items pi INNER JOIN employees e ON e.id = pi.employee_id WHERE pi.period_id = :pid ORDER BY e.apellido_paterno");
-            $stmt->execute([':pid' => $periodId]);
+            if ($periodId <= 0) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'period_id requerido.']);
+                break;
+            }
+
+            $scope = resolveEmployeeScope($db);
+            if ($scope['type'] === 'none') {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Acceso denegado.']);
+                break;
+            }
+
+            $sql = "SELECT pi.*, e.nombre, e.apellido_paterno, e.apellido_materno, e.puesto
+                    FROM payroll_items pi
+                    INNER JOIN employees e ON e.id = pi.employee_id
+                    WHERE pi.period_id = :pid";
+            $params = [':pid' => $periodId];
+
+            if ($scope['type'] === 'dept') {
+                $sql .= " AND e.departamento = :scope_depto";
+                $params[':scope_depto'] = $scope['id'];
+            } elseif ($scope['type'] === 'own') {
+                $sql .= " AND pi.employee_id = :scope_eid";
+                $params[':scope_eid'] = $scope['id'];
+            }
+
+            $sql .= " ORDER BY e.apellido_paterno";
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
             break;
         default:
