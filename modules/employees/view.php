@@ -13,8 +13,23 @@ if ($id <= 0) {
 }
 
 $db = getDB();
-$stmt = $db->prepare('SELECT e.*, u.username, u.email AS user_email FROM employees e LEFT JOIN users u ON u.id = e.user_id WHERE e.id = :id LIMIT 1');
-$stmt->execute([':id' => $id]);
+
+// Alcance según el rol: Empleado solo su registro; Jefe de área su departamento
+$scope = resolveEmployeeScope($db);
+$scopeWhere = '';
+$params = [':id' => $id];
+if ($scope['type'] === 'own') {
+    $scopeWhere = ' AND e.id = :scope_eid';
+    $params[':scope_eid'] = $scope['id'];
+} elseif ($scope['type'] === 'dept') {
+    $scopeWhere = ' AND e.departamento = :scope_depto';
+    $params[':scope_depto'] = $scope['id'];
+} elseif ($scope['type'] === 'none') {
+    $scopeWhere = ' AND 0';
+}
+
+$stmt = $db->prepare('SELECT e.*, u.username, u.email AS user_email FROM employees e LEFT JOIN users u ON u.id = e.user_id WHERE e.id = :id' . $scopeWhere . ' LIMIT 1');
+$stmt->execute($params);
 $emp = $stmt->fetch();
 
 if (!$emp) {

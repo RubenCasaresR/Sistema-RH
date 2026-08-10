@@ -1,6 +1,6 @@
 <?php
 
-define('TAX_YEAR', 2025);
+define('TAX_YEAR', 2026);
 
 /**
  * Cuenta los días laborables (lunes a viernes) dentro de un rango de fechas.
@@ -57,7 +57,7 @@ function getUMA(int $year = TAX_YEAR): array
             error_log("UMA $year no encontrada, usando $maxYear como respaldo.");
             return getUMA($maxYear);
         }
-        return ['valor_diario' => 113.14, 'valor_mensual' => 3438.80];
+        return ['valor_diario' => 117.31, 'valor_mensual' => 3566.22];
     }
     return $uma;
 }
@@ -332,11 +332,9 @@ function calculatePayrollForEmployee(
     $isr = $isrCalc['isr_neto'];
     $subsidio = $isrCalc['subsidio'];
 
-    // Subsidio al empleo que excede el ISR: se paga al trabajador (LISR)
-    $subsidioCompensable = round(max(0, $subsidio - $isrCalc['isr']), 2);
-    if ($subsidioCompensable > 0) {
-        $percepciones += $subsidioCompensable;
-    }
+    // Subsidio al empleo: desde 2024 se aplica solo como credito contra el ISR.
+    // El excedente ya no se entrega en efectivo al trabajador (Decretos DOF 01/05/2024 y 31/12/2025).
+    $subsidioCompensable = 0;
 
     $imss = calculateIMSSObrero($salarioDiario, $diasLaborablesReales, $anioPeriodo);
 

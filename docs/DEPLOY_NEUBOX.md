@@ -112,7 +112,7 @@ BACKUP_KEEP=14
 ## 6. Pruebas post-despliegue
 
 1. **HTTPS**: abrir `https://tudominio.com` → debe redirigir correctamente y no marcar error de certificado.
-2. **Login admin**: `admin` + contraseña temporal (la del seed) → debe **forzar el cambio de contraseña**.
+2. **Login admin**: `admin` + contraseña temporal `AdminRH2026!` (definida en `sql/seed_data.sql`) → debe **forzar el cambio de contraseña**.
 3. **Correo**: usar *¿Olvidaste tu contraseña?* → debe llegar el correo vía SMTP (revisar también spam).
 4. **Nómina**: calcular una quincena (por ejemplo 2026-07) → verificar ISR/IMSS con tarifas 2026 y que no muestre errores.
 5. **Módulos**: asistencia, vacaciones, incidencias, tablero de control.

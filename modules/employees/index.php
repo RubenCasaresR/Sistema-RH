@@ -8,6 +8,17 @@ require_once __DIR__ . '/../../includes/header.php';
 
 $db = getDB();
 
+// Alcance según el rol: Empleado solo su registro; Jefe de área su departamento
+$scope = resolveEmployeeScope($db);
+$scopeWhere = '';
+if ($scope['type'] === 'own') {
+    $scopeWhere = ' AND e.id = :scope_eid';
+} elseif ($scope['type'] === 'dept') {
+    $scopeWhere = ' AND e.departamento = :scope_depto';
+} elseif ($scope['type'] === 'none') {
+    $scopeWhere = ' AND 0';
+}
+
 $search = trim($_GET['search'] ?? '');
 $filtroDepto = $_GET['departamento'] ?? '';
 $filtroContrato = $_GET['tipo_contrato'] ?? '';
@@ -15,12 +26,21 @@ $filtroEstatus = $_GET['estatus'] ?? 'activos';
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 20;
 
-$departments = $db->query("SELECT DISTINCT departamento FROM employees WHERE departamento IS NOT NULL AND departamento != '' ORDER BY departamento")->fetchAll(PDO::FETCH_COLUMN);
+if ($scope['type'] === 'dept') {
+    $departments = [$scope['id']];
+} elseif ($scope['type'] === 'own' || $scope['type'] === 'none') {
+    $departments = [];
+} else {
+    $departments = $db->query("SELECT DISTINCT departamento FROM employees WHERE departamento IS NOT NULL AND departamento != '' ORDER BY departamento")->fetchAll(PDO::FETCH_COLUMN);
+}
 
 $tiposContrato = ['Base', 'Confianza', 'Temporal', 'Honorarios', 'Outsourcing', 'Becario'];
 
-$where = 'WHERE 1=1';
+$where = 'WHERE 1=1' . $scopeWhere;
 $params = [];
+
+if ($scope['type'] === 'own') $params[':scope_eid'] = $scope['id'];
+if ($scope['type'] === 'dept') $params[':scope_depto'] = $scope['id'];
 
 if ($filtroEstatus === 'activos') {
     $where .= ' AND e.activo = 1';

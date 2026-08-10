@@ -8,16 +8,38 @@ require_once __DIR__ . '/../../includes/header.php';
 
 $db = getDB();
 
-// === KPIs ===
-$plantillaActiva = $db->query("SELECT COUNT(*) FROM employees WHERE activo = 1")->fetchColumn();
-$altasMes = $db->query("SELECT COUNT(*) FROM employees WHERE activo = 1 AND MONTH(fecha_ingreso) = MONTH(CURDATE()) AND YEAR(fecha_ingreso) = YEAR(CURDATE())")->fetchColumn();
-$bajasMes = $db->query("SELECT COUNT(*) FROM employees WHERE activo = 0 AND MONTH(updated_at) = MONTH(CURDATE()) AND YEAR(updated_at) = YEAR(CURDATE())")->fetchColumn();
-$rotacion = $plantillaActiva > 0 ? round(($altasMes + $bajasMes) / $plantillaActiva * 100, 1) : 0;
+// Alcance de datos según el rol: Empleado y sin vínculo solo ven su propia información
+$scope = resolveEmployeeScope($db);
+$fullScope = in_array($scope['type'], ['all', 'dept'], true);
+$eid = currentEmployeeId($db);
 $diasDelMes = (int)(new DateTime())->format('t');
-$totalFaltas = $db->query("SELECT COUNT(*) FROM attendance_logs WHERE MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE()) AND hora_entrada IS NULL")->fetchColumn();
-$ausentismo = ($plantillaActiva > 0 && $diasDelMes > 0) ? round($totalFaltas / ($diasDelMes * $plantillaActiva) * 100, 1) : 0;
-$vacPendientes = $db->query("SELECT COUNT(*) FROM leave_requests WHERE estatus = 'pendiente'")->fetchColumn();
-$antiguedadPromedio = $db->query("SELECT ROUND(AVG(DATEDIFF(CURDATE(), fecha_ingreso) / 365), 1) FROM employees WHERE activo = 1 AND fecha_ingreso IS NOT NULL")->fetchColumn();
+
+// === KPIs ===
+if ($fullScope) {
+    $plantillaActiva = $db->query("SELECT COUNT(*) FROM employees WHERE activo = 1")->fetchColumn();
+    $altasMes = $db->query("SELECT COUNT(*) FROM employees WHERE activo = 1 AND MONTH(fecha_ingreso) = MONTH(CURDATE()) AND YEAR(fecha_ingreso) = YEAR(CURDATE())")->fetchColumn();
+    $bajasMes = $db->query("SELECT COUNT(*) FROM employees WHERE activo = 0 AND MONTH(updated_at) = MONTH(CURDATE()) AND YEAR(updated_at) = YEAR(CURDATE())")->fetchColumn();
+    $rotacion = $plantillaActiva > 0 ? round(($altasMes + $bajasMes) / $plantillaActiva * 100, 1) : 0;
+    $totalFaltas = $db->query("SELECT COUNT(*) FROM attendance_logs WHERE MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE()) AND hora_entrada IS NULL")->fetchColumn();
+    $ausentismo = ($plantillaActiva > 0 && $diasDelMes > 0) ? round($totalFaltas / ($diasDelMes * $plantillaActiva) * 100, 1) : 0;
+    $vacPendientes = $db->query("SELECT COUNT(*) FROM leave_requests WHERE estatus = 'pendiente'")->fetchColumn();
+    $antiguedadPromedio = $db->query("SELECT ROUND(AVG(DATEDIFF(CURDATE(), fecha_ingreso) / 365), 1) FROM employees WHERE activo = 1 AND fecha_ingreso IS NOT NULL")->fetchColumn();
+} else {
+    $plantillaActiva = $eid ? 1 : 0;
+    $altasMes = 0;
+    $bajasMes = 0;
+    $rotacion = 0;
+    $stmtFaltas = $db->prepare("SELECT COUNT(*) FROM attendance_logs WHERE employee_id = :eid AND MONTH(fecha) = MONTH(CURDATE()) AND YEAR(fecha) = YEAR(CURDATE()) AND hora_entrada IS NULL");
+    $stmtFaltas->execute([':eid' => $eid]);
+    $totalFaltas = $eid ? (int)$stmtFaltas->fetchColumn() : 0;
+    $ausentismo = ($eid && $diasDelMes > 0) ? round($totalFaltas / $diasDelMes * 100, 1) : 0;
+    $stmtVac = $db->prepare("SELECT COUNT(*) FROM leave_requests WHERE estatus = 'pendiente' AND employee_id = :eid");
+    $stmtVac->execute([':eid' => $eid]);
+    $vacPendientes = $eid ? (int)$stmtVac->fetchColumn() : 0;
+    $stmtAnt = $db->prepare("SELECT ROUND(DATEDIFF(CURDATE(), fecha_ingreso) / 365, 1) FROM employees WHERE id = :eid AND activo = 1 AND fecha_ingreso IS NOT NULL");
+    $stmtAnt->execute([':eid' => $eid]);
+    $antiguedadPromedio = $eid ? $stmtAnt->fetchColumn() : 0;
+}
 
 // Cumpleaños del mes
 $cumples = $db->query("
@@ -38,31 +60,37 @@ $aniversarios = $db->query("
     ORDER BY DAYOFYEAR(aniversario)
 ")->fetchAll();
 
-// Distribución por departamento
-$deptos = $db->query("SELECT departamento, COUNT(*) AS total FROM employees WHERE activo = 1 AND departamento IS NOT NULL AND departamento != '' GROUP BY departamento ORDER BY total DESC")->fetchAll();
+// Distribución por departamento y asistencia (solo alcance general/departamento)
+$deptos = [];
+$asistenciaSemanal = [];
+if ($fullScope) {
+    $deptos = $db->query("SELECT departamento, COUNT(*) AS total FROM employees WHERE activo = 1 AND departamento IS NOT NULL AND departamento != '' GROUP BY departamento ORDER BY total DESC")->fetchAll();
 
-// Asistencia últimos 7 días
-$asistenciaSemanal = $db->query("
-    SELECT fecha,
-           SUM(CASE WHEN hora_entrada IS NOT NULL THEN 1 ELSE 0 END) AS presentes,
-           SUM(CASE WHEN hora_entrada IS NULL THEN 1 ELSE 0 END) AS ausentes
-    FROM attendance_logs
-    WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-      AND tipo = 'regular'
-    GROUP BY fecha
-    ORDER BY fecha
-")->fetchAll();
+    $asistenciaSemanal = $db->query("
+        SELECT fecha,
+               SUM(CASE WHEN hora_entrada IS NOT NULL THEN 1 ELSE 0 END) AS presentes,
+               SUM(CASE WHEN hora_entrada IS NULL THEN 1 ELSE 0 END) AS ausentes
+        FROM attendance_logs
+        WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+          AND tipo = 'regular'
+        GROUP BY fecha
+        ORDER BY fecha
+    ")->fetchAll();
+}
 
-// Últimos períodos de nómina
-$periodosNomina = $db->query("SELECT periodo, total_neto FROM (
-    SELECT pp.periodo, SUM(pi.sueldo_neto) AS total_neto
-    FROM payroll_items pi
-    INNER JOIN payroll_periods pp ON pp.id = pi.period_id
-    GROUP BY pp.id, pp.periodo
-    ORDER BY pp.periodo DESC
-    LIMIT 6
-) AS sub ORDER BY periodo")->fetchAll();
-$periodosNomina = array_reverse($periodosNomina);
+// Últimos períodos de nómina (solo quienes tienen permiso de nómina)
+$periodosNomina = [];
+if ($fullScope && can('payroll.read')) {
+    $periodosNomina = $db->query("SELECT periodo, total_neto FROM (
+        SELECT pp.periodo, SUM(pi.sueldo_neto) AS total_neto
+        FROM payroll_items pi
+        INNER JOIN payroll_periods pp ON pp.id = pi.period_id
+        GROUP BY pp.id, pp.periodo
+        ORDER BY pp.periodo DESC
+        LIMIT 6
+    ) AS sub ORDER BY periodo")->fetchAll();
+    $periodosNomina = array_reverse($periodosNomina);
+}
 
 $flash = getFlash();
 $hour = (int)date('H');
@@ -134,6 +162,7 @@ $fechaLarga = $diasSemana[(int)date('w')] . ', ' . (int)date('d') . ' de ' . $me
 </div>
 
 <!-- Charts -->
+<?php if ($fullScope): ?>
 <div class="charts-grid">
     <div class="chart-container">
         <div class="chart-header">
@@ -151,13 +180,19 @@ $fechaLarga = $diasSemana[(int)date('w')] . ', ' . (int)date('d') . ' de ' . $me
     </div>
 </div>
 
-<?php if (count($periodosNomina) > 0): ?>
+<?php if (can('payroll.read') && count($periodosNomina) > 0): ?>
     <div class="chart-container chart-full">
         <div class="chart-header">
             <i class="fa-solid fa-file-invoice-dollar" style="color:var(--color-primary);"></i>
             <h3>Nómina mensual</h3>
         </div>
         <div class="chart-body chart-body-lg"><canvas id="chartNomina"></canvas></div>
+    </div>
+<?php endif; ?>
+<?php else: ?>
+    <div class="card">
+        <h3 class="card-title"><i class="fa-solid fa-circle-info" style="margin-right:6px;color:var(--color-secondary);"></i> Tu resumen</h3>
+        <p class="text-secondary">Vista personal: los indicadores de arriba muestran únicamente tu información. Registra tu asistencia y consulta tus vacaciones desde los accesos rápidos.</p>
     </div>
 <?php endif; ?>
 
@@ -263,10 +298,12 @@ window.DASHBOARD_DATA = <?= json_encode([
         'labels' => array_map(function($d) { return $d['departamento']; }, $deptos),
         'data'   => array_map(function($d) { return (int)$d['total']; }, $deptos),
     ],
-    'nomina' => [
-        'labels' => array_map(function($p) { return $p['periodo']; }, $periodosNomina),
-        'data'   => array_map(function($p) { return (float)$p['total_neto']; }, $periodosNomina),
-    ],
+    'nomina' => ($fullScope && can('payroll.read'))
+        ? [
+            'labels' => array_map(function($p) { return $p['periodo']; }, $periodosNomina),
+            'data'   => array_map(function($p) { return (float)$p['total_neto']; }, $periodosNomina),
+        ]
+        : ['labels' => [], 'data' => []],
 ]) ?>;
 </script>
 

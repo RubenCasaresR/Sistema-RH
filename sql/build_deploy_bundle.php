@@ -37,13 +37,14 @@ $files = [
     'migrations/fase19_payroll_quincenal.sql',
     'migrations/fase20_tablero_control.sql',
     'migrations/fase21_payroll_fixes.sql',
+    'migrations/fase22_tarifas_2026.sql',
     'seed_data_charts.sql',
 ];
 
 $out = "-- ============================================================\n";
 $out .= "-- SISTEMA RH - Bundle de despliegue (generado automáticamente)\n";
 $out .= "-- Orden: schema + seed_data (roles/permisos/admin) + migraciones\n";
-$out .= "-- fase2..fase21 + seed_data_charts (datos de ejemplo).\n";
+$out .= "-- fase2..fase22 + seed_data_charts (datos de ejemplo).\n";
 $out .= "-- Se eliminaron las sentencias 'USE <base>;'.\n";
 $out .= "-- ============================================================\n\n";
 

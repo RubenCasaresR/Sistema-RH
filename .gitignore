@@ -3,5 +3,6 @@
 .phpunit.cache/
 /backups/
 *.log
+*.xlsx
 .DS_Store
 Thumbs.db

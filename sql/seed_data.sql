@@ -53,11 +53,12 @@ SELECT 2, id FROM permissions
 WHERE clave NOT IN ('payroll.calculate');
 
 -- Usuario administrador por defecto.
--- Contraseña generada aleatoriamente (no documentada). El primer login fuerza el cambio
+-- Contraseña temporal de primer acceso: AdminRH2026!
+-- (documentada en docs/DEPLOY_NEUBOX.md). El primer login fuerza el cambio
 -- de contraseña (ver fase6_security_audit.sql, columna password_change_required).
 -- Para regenerar el hash: php -r "echo password_hash('CLAVE_TEMPORAL', PASSWORD_BCRYPT, ['cost'=>12]);"
 INSERT INTO users (username, email, password_hash, role_id, activo) VALUES
-('admin', 'admin@sistema-rh.com', '$2y$12$HPeIxSl7CJcT4yekVkIjiuDiedjuCHKK81IZ5Vzu8Bj4vqZPRpKD.', 1, 1);
+('admin', 'admin@sistema-rh.com', '$2y$12$4GEvP3IepR5wx1e9MesSW.VRghUrgLjT9OMfCzm5rR2LOuGLcYci6', 1, 1);
 
 -- Empleado de ejemplo
 INSERT INTO employees (
