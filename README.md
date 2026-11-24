@@ -52,6 +52,27 @@ composer.json     PHP dependencies and test script
 .env.example      Example environment settings
 ```
 
+## Architecture overview
+
+This **conceptual code-structure diagram** summarizes the PHP entry point, authentication, feature modules, role/permission checks, and PDO database access. It does not represent a verified production infrastructure.
+
+```mermaid
+flowchart TD
+    A[Browser] --> B[PHP entry point]
+    B --> C{Authenticated session}
+    C -->|No| D[Login module]
+    C -->|Yes| E[Reports dashboard]
+    D --> F[Session and authorization]
+    E --> F
+    F --> G[HR feature modules]
+    G --> H[Shared PHP configuration and PDO]
+    H --> I[(MySQL database)]
+    J[API feature endpoints] --> H
+    K[Role and permission definitions] --> F
+```
+
+**Source references:** [`index.php`](index.php), [`modules/reports/dashboard.php`](modules/reports/dashboard.php), [`config/roles.php`](config/roles.php), [`config/database.php`](config/database.php), and the [`api/`](api/) and [`modules/`](modules/) directories. Arrows summarize logical relationships rather than all runtime call paths.
+
 ## Local development
 
 This is a **starting point** based on the repository configuration; a fresh installation has not been tested for this README.
